@@ -1,0 +1,24 @@
+{
+  "name": "hullo",
+  "version": "0.1.0",
+  "description": "",
+  "main": "./index.ts",
+  "scripts": {
+    "index-modules": "find . -type d -depth 1 | sed \"/node_modules/d\" | sed \"/.git/d\" | while read -r loc; do find \"$loc\" -type f -iname \"*.ts\" -depth 1 | sed -e \"/index/d\" | sed -E \"s@$loc/(.*)\\.ts@export * from './\\1';@\" > $loc/index.ts; done",
+    "index-all": "find . -type d -depth 1 | sed \"/node_modules/d\" | sed \"/.git/d\" | xargs -n1 -I{} find {} -type f -name index.ts | sed -E \"s/(.*)\\/index.ts/export * from '\\1';/\" > index.ts",
+    "index": "npm run index-modules; npm run index-all;",
+    "check": "npm run index; tsc --noEmit",
+    "build": "npm run index; tsc",
+    "clean": "find . -iname \"*.js\" -maxdepth 2 -delete; npm run index;"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "jest": "^23.1.0",
+    "prettier": "^1.13.5",
+    "ts-jest": "^22.4.6",
+    "ts-node": "^6.1.0",
+    "typescript": "^2.9.1"
+  }
+}
