@@ -5,5 +5,6 @@ export * from './first';
 export * from './map';
 export * from './end';
 export * from './nth';
+export * from './combineLatest';
 export * from './reduce';
 export * from './merge';
