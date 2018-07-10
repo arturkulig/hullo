@@ -34,6 +34,9 @@ export function combineLatest<T1, T2>(
 ): AsyncIterable<[T1, T2]>;
 export function combineLatest<T>(
   ...streams: AsyncIterable<T>[]
+): AsyncIterable<T[]>;
+export function combineLatest<T>(
+  ...streams: AsyncIterable<T>[]
 ): AsyncIterable<T[]> {
   return observable<T[]>(
     queue(observer => {

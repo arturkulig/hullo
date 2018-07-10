@@ -1,35 +1,31 @@
-import { dualOp } from "../utils/dualOp";
-
-type RegulatePromise<T> = T extends Promise<Promise<infer U>>
-  ? Promise<U>
-  : T extends Promise<infer U> ? T : Promise<T>;
-
-export function reduce<ITEM, RESULT>(
-  accumulator: (result: RESULT, item: ITEM, ordinal: number) => RESULT,
+export function reduce<T, RESULT>(
+  accumulator: (result: RESULT, item: T, ordinal: number) => RESULT,
   initial: RESULT
 ) {
-  type SYNC_RESULT = RESULT;
-  type ASYNC_RESULT = RegulatePromise<RESULT>;
-  return dualOp<ITEM, SYNC_RESULT, ASYNC_RESULT>(
-    reduceSync,
-    (reduceAsync as any) as (value: AsyncIterable<ITEM>) => ASYNC_RESULT
-  );
-
-  function reduceSync(subject: Iterable<ITEM>): SYNC_RESULT {
+  return function sync(subject: Iterable<T>) {
     let ordinal = 0;
     let result: RESULT = initial;
     for (const item of subject) {
       result = accumulator(result, item, ordinal);
     }
     return result;
-  }
+  };
+}
 
-  async function reduceAsync(subject: AsyncIterable<ITEM>) {
+export function reduce$<T, RESULT>(
+  accumulator: (
+    result: RESULT,
+    item: T,
+    ordinal: number
+  ) => Promise<RESULT> | RESULT,
+  initial: RESULT
+) {
+  return async function async(subject: AsyncIterable<T>) {
     let ordinal = 0;
-    let result = initial;
+    let result: RESULT = initial;
     for await (const item of subject) {
-      result = accumulator(result, item, ordinal);
+      result = await accumulator(result, item, ordinal);
     }
     return result;
-  }
+  };
 }

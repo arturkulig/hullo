@@ -1,13 +1,20 @@
 import { last } from "./last";
-import { take } from "./take";
+import { take, take$ } from "./take";
 
 export function nth(ordinal: number) {
   const takeAmount = take(ordinal);
-  return nthOf;
+  return _nth;
 
-  function nthOf<T>(subject: Iterable<T>): Iterable<T>;
-  function nthOf<T>(subject: AsyncIterable<T>): AsyncIterable<T>;
-  function nthOf<T>(subject: any) {
+  function _nth<T>(subject: Iterable<T>) {
     return last<T>(takeAmount<T>(subject));
+  }
+}
+
+export function nth$(ordinal: number) {
+  const takeAmount = take$(ordinal);
+  return _nth$;
+
+  async function _nth$<T>(subject: AsyncIterable<T>) {
+    return last<T>(await takeAmount<T>(subject));
   }
 }
