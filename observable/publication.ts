@@ -1,94 +1,75 @@
-import { AsyncObserver } from "./observableTypes";
-import { subject } from "./subject";
-import { observable } from "./observable";
+import { AsyncObserver } from "../observable/observableTypes";
+import { subject } from "../observable/subject";
+import { observable } from "../observable/observable";
+import { queue } from "../observable/queue";
+import { Subscription, subscribe } from "../observable/subscribe";
 
-const voidObserver: AsyncObserver<any, any> = {
-  get closed() {
-    return true;
-  },
-  next: () => Promise.resolve(),
-  error: () => Promise.resolve(),
-  complete: () => Promise.resolve()
-};
+interface TopicMessage<T, TOPICS extends string> {
+  topic: TOPICS;
+  value: T;
+}
 
-export type AsyncPublicationObserver<T, ERR, SUBJECTS> = AsyncObserver<
-  { subject: SUBJECTS; value: T },
-  ERR
+export type Publication<T, TOPICS extends string> = AsyncIterable<
+  TopicMessage<T, TOPICS>
 >;
 
-export function publication<T, ERR = Error, ID = string>(
-  producer: (observer: AsyncPublicationObserver<T, ERR, ID>) => void
+export function publication<T, TOPICS extends string, ERR = Error>(
+  origin: Publication<T, TOPICS>
 ) {
-  const iterables = new Map<ID, AsyncIterable<T>>();
-  const observers = new Map<ID, AsyncObserver<T, ERR>>();
+  const receivers: { [subject in TOPICS]?: AsyncObserver<T, ERR> } = {};
+  const outputs: { [subject in TOPICS]?: AsyncIterable<T> } = {};
+  let originSub: Subscription | null = null;
 
-  let producerLive = false;
+  return (topic: TOPICS) => {
+    return (
+      outputs[topic] ||
+      (outputs[topic] = subject<T, ERR>(
+        observable<T, ERR>(
+          queue(observer => {
+            receivers[topic] = observer;
 
-  return getIterableOf;
+            if (!originSub) {
+              originSub = subscribeOrigin();
+            }
 
-  function getObserverOf(subjectId: ID) {
-    if (!observers.has(subjectId)) {
-      instantiateObserver(subjectId);
-    }
-    return observers.get(subjectId)!;
-  }
-
-  function getIterableOf(subjectId: ID) {
-    if (!iterables.has(subjectId)) {
-      instantiateIterable(subjectId);
-    }
-    return iterables.get(subjectId)!;
-  }
-
-  function instantiateObserver(subjectId: ID) {
-    if (!producerLive) {
-      instantiateProducer();
-    }
-    observers.set(subjectId, voidObserver);
-  }
-
-  function instantiateIterable(subjectId: ID) {
-    if (!producerLive) {
-      instantiateProducer();
-    }
-
-    iterables.set(
-      subjectId,
-      subject<T, ERR>(
-        observable<T, ERR>(observer => {
-          observers.set(subjectId, observer);
-        })
-      )
+            return () => {
+              if (originSub) {
+                if (!originSub.closed) {
+                  originSub.unsubscribe();
+                }
+                originSub = null;
+              }
+            };
+          })
+        )
+      ))
     );
-  }
+  };
 
-  function instantiateProducer() {
-    const outerObserver: AsyncPublicationObserver<T, ERR, ID> = {
-      get closed() {
-        for (const [, observer] of observers) {
-          if (!observer.closed) {
-            return true;
-          }
+  function subscribeOrigin() {
+    return subscribe(origin, {
+      async next({ topic, value }: TopicMessage<T, TOPICS>) {
+        const topicReceiver = receivers[topic];
+        if (topicReceiver) {
+          await topicReceiver.next(value);
         }
-        return false;
       },
-      next({ subject: subjectId, value }) {
-        return getObserverOf(subjectId).next(value);
-      },
-      async error(error) {
-        await Promise.all(
-          [...observers].map(([, observer]) => observer.error(error))
-        );
+      async error(error: ERR) {
+        await Promise.all(values(receivers).map(r => r.error(error)));
       },
       async complete() {
-        await Promise.all(
-          [...observers].map(([, observer]) => observer.complete())
-        );
+        await Promise.all(values(receivers).map(r => r.complete()));
       }
-    };
-
-    producerLive = true;
-
-    producer(outerObserver);
+    });
   }
+}
+
+function values<T extends object, U extends T[keyof T]>(
+  input: T
+): Array<U extends undefined ? never : U> {
+  const result = [];
+  for (const k in input) {
+    result.push(input[k]);
+  }
+  return result as any;
 }
