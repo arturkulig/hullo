@@ -1,8 +1,8 @@
-import { AsyncObserver } from "../observable/observableTypes";
-import { subject } from "../observable/subject";
-import { observable } from "../observable/observable";
-import { queue } from "../observable/queue";
-import { Subscription, subscribe } from "../observable/subscribe";
+import { AsyncObserver } from "../core/observableTypes";
+import { subject } from "../mods/subject";
+import { queue } from "../mods/queue";
+import { Subscription, subscribe } from "../utils/subscribe";
+import { observable } from "../core/observable";
 
 interface TopicMessage<T, TOPICS extends string> {
   topic: TOPICS;

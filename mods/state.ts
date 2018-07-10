@@ -1,6 +1,6 @@
-import { subscribe } from "../observable/subscribe";
-import { observable } from "../observable/observable";
-import { queue } from "./queue";
+import { subscribe } from "../utils/subscribe";
+import { observable } from "../core/observable";
+import { queue } from "../mods/queue";
 
 export function state<T, ERR = Error>(origin: AsyncIterable<T>) {
   let last: { value: T } | null = null;

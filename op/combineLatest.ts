@@ -1,6 +1,6 @@
-import { observable } from "../observable/observable";
-import { queue } from "../observable/queue";
-import { subscribe } from "../observable/subscribe";
+import { subscribe } from "../utils/subscribe";
+import { observable } from "../core/observable";
+import { queue } from "../mods/queue";
 
 export function combineLatest<T1, T2, T3, T4, T5, T6>(
   s1: AsyncIterable<T1>,

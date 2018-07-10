@@ -1,4 +1,5 @@
-import { observable, subscribe } from "../observable";
+import { observable } from "../core/observable";
+import { subscribe } from "../utils/subscribe";
 
 export function* merge<T>(...iterables: Array<Iterable<T>>): Iterable<T> {
   for (const iterable of iterables) {

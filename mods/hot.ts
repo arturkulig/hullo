@@ -1,7 +1,7 @@
-import { subscribe } from "../observable/subscribe";
-import { queue } from "../observable/queue";
-import { observable } from "../observable/observable";
-import { AsyncObserver } from "../observable/observableTypes";
+import { subscribe } from "../utils/subscribe";
+import { queue } from "../mods/queue";
+import { AsyncObserver } from "../core/observableTypes";
+import { observable } from "../core/observable";
 
 export function hot<T, ERR = Error>(origin: AsyncIterable<T>) {
   let subsCount = 0;

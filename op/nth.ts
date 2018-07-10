@@ -1,5 +1,5 @@
-import { last } from "./last";
-import { take, take$ } from "./take";
+import { last } from "../op/last";
+import { take, take$ } from "../op/take";
 
 export function nth(ordinal: number) {
   const takeAmount = take(ordinal);

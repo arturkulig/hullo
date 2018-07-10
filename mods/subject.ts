@@ -1,7 +1,7 @@
-import { AsyncObserver } from "./observableTypes";
-import { subscribe, Subscription } from "../observable/subscribe";
-import { observable } from "../observable/observable";
-import { queue } from "./queue";
+import { subscribe, Subscription } from "../utils/subscribe";
+import { queue } from "../mods/queue";
+import { observable } from "../core/observable";
+import { AsyncObserver } from "../core/observableTypes";
 
 export function subject<T, ERR = Error>(origin: AsyncIterable<T>) {
   const innerObservers: Array<AsyncObserver<T, ERR>> = [];

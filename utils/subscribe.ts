@@ -1,4 +1,4 @@
-import { AsyncObserver } from "../observable/observableTypes";
+import { AsyncObserver } from "../core/observableTypes";
 
 export interface Subscription {
   closed: boolean;
@@ -40,13 +40,13 @@ async function over<T, ERR>(
       if (observer.next) {
         try {
           await observer.next(value);
-        } catch { }
+        } catch {}
       }
     } catch (e) {
       if (observer.error) {
         try {
           await observer.error(e);
-        } catch { }
+        } catch {}
       }
     }
   }
@@ -60,13 +60,13 @@ function makeDroppable<T>(task: Promise<T>) {
   let cancel = noop;
   const result = new Promise<
     { cancelled: false; value: T } | { cancelled: true }
-    >((resolve, reject) => {
-      task.then(value => resolve({ cancelled: false, value }), reject);
-      cancel = () => {
-        resolve({ cancelled: true });
-      };
-    });
+  >((resolve, reject) => {
+    task.then(value => resolve({ cancelled: false, value }), reject);
+    cancel = () => {
+      resolve({ cancelled: true });
+    };
+  });
   return { cancel, result };
 }
 
-function noop() { }
+function noop() {}

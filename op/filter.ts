@@ -1,4 +1,4 @@
-import { Transformer } from "./map";
+import { Transformer } from "../op/map";
 
 export function filter<T>(filter: Transformer<T, boolean>) {
   return function* _filter(subject: Iterable<T>): Iterable<T> {

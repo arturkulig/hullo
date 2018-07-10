@@ -1,3 +1,4 @@
 export * from './isAsyncIterable';
-export * from './dualOp';
+export * from './forEach';
 export * from './isIterable';
+export * from './subscribe';
