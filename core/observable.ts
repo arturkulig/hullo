@@ -17,13 +17,8 @@ const CLOSED: Closed = { type: "closed" };
 export function observable<T, ERR = Error>(
   producer: AsyncProducer<T, ERR>
 ): AsyncIterable<T> {
-  let running = false;
   return {
     [Symbol.asyncIterator]() {
-      if (running) {
-        console.warn(`observable already running ${producer.name}(observer)`);
-      }
-      running = true;
       return createIterator<T, ERR>(producer);
     }
   };
@@ -44,7 +39,7 @@ function createIterator<T, ERR>(
 
   const observer: AsyncObserver<T, ERR> = {
     get closed() {
-      return false;
+      return state.type === "closed";
     },
     next(value: T) {
       return new Promise<void>((confirm, reject) =>
@@ -136,7 +131,7 @@ function createIterator<T, ERR>(
         return Promise.reject(new AlreadyAwaiting());
 
       case "closed":
-        return Promise.reject(new IteratorClosed());
+        return Promise.resolve({ done: true, value: (undefined as any) as T });
 
       default:
         return Promise.reject(new ImpossibleState<T, ERR>(state));
@@ -171,7 +166,7 @@ function createIterator<T, ERR>(
         message.reject(new MessageInQueue());
         return;
       case "closed":
-        message.reject(new IteratorClosed());
+        message.confirm();
         return;
     }
   }
@@ -205,8 +200,8 @@ function createIterator<T, ERR>(
 abstract class Exception {
   abstract message: string;
 
-  toString() {
-    return this.message;
+  get [Symbol.toStringTag]() {
+    return `Exception: ${this.message}`;
   }
 }
 
@@ -216,10 +211,6 @@ export class MessageInQueue extends Exception {
 
 export class AlreadyAwaiting extends Exception {
   message = "Already awaiting for next iterator result";
-}
-
-export class IteratorClosed extends Exception {
-  message = "Iterator is closed has been closed";
 }
 
 export class ImpossibleState<T, ERR> extends Exception {
