@@ -1,0 +1,15 @@
+import { subscribe } from "../utils/subscribe";
+
+export function render(mount: HTMLElement, root$: AsyncIterable<HTMLElement>) {
+  let last: HTMLElement | null = null;
+  return subscribe(root$, {
+    async next(root) {
+      console.log("mounting", root);
+      if (last) {
+        mount.removeChild(last);
+      }
+      mount.appendChild(root);
+      last = root;
+    }
+  });
+}
