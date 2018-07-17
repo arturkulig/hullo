@@ -41,13 +41,28 @@ export function combineLatest<T>(
   return observable<T[]>(
     queue(observer => {
       let last = new Array<T>(streams.length);
+
+      let presentAll = false;
+      const presentList = streams.map(() => false);
+
       const subs = streams.map((stream, idx) =>
         subscribe(stream, {
-          async next(value: T) {
+          next(value: T) {
             const next = [...last];
             next[idx] = value;
             last = next;
-            await observer.next(next);
+            if (!presentAll) {
+              presentList[idx] = true;
+              presentAll = true;
+              for (const present of presentList) {
+                if (!present) {
+                  presentAll = false;
+                }
+              }
+            }
+            if (presentAll) {
+              return observer.next(next);
+            }
           },
           error: observer.error,
           complete: observer.complete

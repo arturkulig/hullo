@@ -14,7 +14,7 @@ export function nth$(ordinal: number) {
   const takeAmount = take$(ordinal);
   return _nth$;
 
-  async function _nth$<T>(subject: AsyncIterable<T>) {
-    return last<T>(await takeAmount<T>(subject));
+  function _nth$<T>(subject: AsyncIterable<T>) {
+    return takeAmount<T>(subject).then(last);
   }
 }

@@ -12,7 +12,7 @@ export interface AsyncIterableConsumer<T> {
 
 export function forEach<T>(
   collection: Iterable<T>,
-  consumer: IterableConsumer<T>
+  actor: IterableConsumer<T>
 ): void;
 export function forEach<T>(
   collection: AsyncIterable<T>,
@@ -31,8 +31,8 @@ export function forEach<T>(
   } else if (isAsyncIterable(collection)) {
     let ordinal = 0;
     return subscribe<T, Error>(collection, {
-      async next(v: T) {
-        await actor(v, ordinal++);
+      next(v: T) {
+        return actor(v, ordinal++);
       }
     });
   }
