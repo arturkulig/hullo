@@ -9,23 +9,23 @@ export function queue<T, ERR = Error>(producer: AsyncProducer<T, ERR>) {
         return innerObserver.closed;
       },
       next(value: T) {
-        return new Promise((confirm, infirm) => {
+        return new Promise((confirm, reject) => {
           previousMessageReceived = previousMessageReceived.then(() =>
-            innerObserver.next(value).then(confirm, infirm)
+            innerObserver.next(value).then(confirm, reject)
           );
         });
       },
       error(error: ERR) {
-        return new Promise((confirm, infirm) => {
+        return new Promise((confirm, reject) => {
           previousMessageReceived = previousMessageReceived.then(() =>
-            innerObserver.error(error).then(confirm, infirm)
+            innerObserver.error(error).then(confirm, reject)
           );
         });
       },
       complete() {
-        return new Promise((confirm, infirm) => {
+        return new Promise((confirm, reject) => {
           previousMessageReceived = previousMessageReceived.then(() =>
-            innerObserver.complete().then(confirm, infirm)
+            innerObserver.complete().then(confirm, reject)
           );
         });
       }
