@@ -3,7 +3,7 @@ export function isAsyncIterable<T = any>(
 ): subject is AsyncIterable<T> {
   return (
     subject != null &&
-    Symbol.asyncIterator in subject &&
+    Object.getOwnPropertyDescriptor(subject, Symbol.asyncIterator) != null &&
     typeof subject[Symbol.asyncIterator] === "function"
   );
 }
