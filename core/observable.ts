@@ -11,8 +11,11 @@ import {
 } from "../core/observableTypes";
 
 const INITIAL: Initial = { type: "initial" };
-
 const CLOSED: Closed = { type: "closed" };
+const ITERATOR_COMPLETION: IteratorResult<any> = {
+  done: true,
+  value: undefined
+};
 
 export function observable<T, ERR = Error>(
   producer: AsyncProducer<T, ERR>
@@ -43,31 +46,23 @@ function createIterator<T, ERR>(
     },
     next(value: T) {
       return new Promise<void>((confirm, reject) =>
-        pushIncomingMessage({
-          type: "incoming:value",
-          value,
-          confirm,
-          reject
-        })
+        pushIncomingMessage("incoming:value", confirm, reject, value, undefined)
       );
     },
     error(error: ERR) {
       return new Promise<void>((confirm, reject) =>
-        pushIncomingMessage({
-          type: "incoming:error",
-          error,
-          confirm,
-          reject
-        })
+        pushIncomingMessage("incoming:error", confirm, reject, undefined, error)
       );
     },
     complete() {
       return new Promise<void>((confirm, reject) =>
-        pushIncomingMessage({
-          type: "incoming:completion",
+        pushIncomingMessage(
+          "incoming:completion",
           confirm,
-          reject
-        })
+          reject,
+          undefined,
+          undefined
+        )
       );
     }
   };
@@ -100,38 +95,47 @@ function createIterator<T, ERR>(
       case "incoming:value":
         const pendingResult = state;
         return new Promise<IteratorResult<T>>((resolve, reject) => {
-          consumeMessage(pendingResult, {
-            type: "consumer",
-            feed: resolve,
-            interrupt: reject
-          });
+          consumeMessage(
+            pendingResult.type,
+            pendingResult.confirm,
+            pendingResult.value,
+            undefined,
+            resolve,
+            reject
+          );
         });
 
       case "incoming:error":
         const pendingError = state;
         return new Promise<IteratorResult<T>>((resolve, reject) => {
-          consumeMessage(pendingError, {
-            type: "consumer",
-            feed: resolve,
-            interrupt: reject
-          });
+          consumeMessage(
+            pendingError.type,
+            pendingError.confirm,
+            undefined,
+            pendingError.error,
+            resolve,
+            reject
+          );
         });
 
       case "incoming:completion":
         const pendingCompletion = state;
         return new Promise<IteratorResult<T>>((resolve, reject) => {
-          consumeMessage(pendingCompletion, {
-            type: "consumer",
-            feed: resolve,
-            interrupt: reject
-          });
+          consumeMessage(
+            pendingCompletion.type,
+            pendingCompletion.confirm,
+            undefined,
+            undefined,
+            resolve,
+            reject
+          );
         });
 
       case "consumer":
         return Promise.reject(new AlreadyAwaiting());
 
       case "closed":
-        return Promise.resolve({ done: true, value: (undefined as any) as T });
+        return Promise.resolve(ITERATOR_COMPLETION);
 
       default:
         return Promise.reject(new ImpossibleState<T, ERR>(state));
@@ -145,53 +149,92 @@ function createIterator<T, ERR>(
     if (cancellation) {
       cancellation();
     }
-    return Promise.resolve({
-      done: true,
-      value: (undefined as any) as T
-    });
+    return Promise.resolve(ITERATOR_COMPLETION);
   }
 
   function pushIncomingMessage(
-    message: IncomingValue<T> | IncomingCompletion | IncomingError<ERR>
+    messageType: (
+      | IncomingValue<T>
+      | IncomingCompletion
+      | IncomingError<ERR>)["type"],
+    messageConfirm: (
+      | IncomingValue<T>
+      | IncomingCompletion
+      | IncomingError<ERR>)["confirm"],
+    messageReject: (
+      | IncomingValue<T>
+      | IncomingCompletion
+      | IncomingError<ERR>)["reject"],
+    messageValue: (IncomingValue<T>)["value"] | undefined,
+    messageError: (IncomingError<ERR>)["error"] | undefined
   ) {
     switch (state.type) {
       case "initial":
-        state = message;
+        state = {
+          type: messageType,
+          confirm: messageConfirm,
+          reject: messageReject,
+          value: messageValue,
+          error: messageError
+        } as any;
         break;
       case "consumer":
-        consumeMessage(message, state);
+        consumeMessage(
+          messageType,
+          messageConfirm,
+          messageValue,
+          undefined,
+          state.feed,
+          state.interrupt
+        );
         break;
       case "incoming:value":
       case "incoming:error":
-        message.reject(new MessageInQueue());
+        messageReject(new MessageInQueue());
         return;
       case "closed":
-        message.confirm();
+        messageConfirm();
         return;
     }
   }
 
   function consumeMessage(
-    message: IncomingValue<T> | IncomingCompletion | IncomingError<ERR>,
-    consumer: AwaitingConsumer<T, ERR>
+    messageType: (
+      | IncomingValue<T>
+      | IncomingCompletion
+      | IncomingError<ERR>)["type"],
+    messageConfirm: (
+      | IncomingValue<T>
+      | IncomingCompletion
+      | IncomingError<ERR>)["confirm"],
+    messageValue: (IncomingValue<T>)["value"] | undefined,
+    messageError: (IncomingError<ERR>)["error"] | undefined,
+    consumerFeed: AwaitingConsumer<T, ERR>["feed"],
+    consumerInterrupt: AwaitingConsumer<T, ERR>["interrupt"]
   ) {
-    switch (message.type) {
+    switch (messageType) {
       case "incoming:value":
         state = INITIAL;
-        consumer.feed({ done: false, value: message.value });
-        message.confirm();
+        if (messageValue == null) {
+          throw new Error();
+        }
+        consumerFeed({ done: false, value: messageValue });
+        messageConfirm();
         break;
 
       case "incoming:completion":
         state = CLOSED;
-        consumer.feed({ done: true, value: (undefined as any) as T });
-        message.confirm();
+        consumerFeed(ITERATOR_COMPLETION);
+        messageConfirm();
         break;
 
       case "incoming:error":
         state = CLOSED;
-        consumer.interrupt(message.error);
-        message.confirm();
+        if (messageError == null) {
+          throw new Error();
+        }
+        consumerInterrupt(messageError);
+        messageConfirm();
         break;
     }
   }
