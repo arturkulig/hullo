@@ -2,41 +2,93 @@ import { subscribe } from "../utils/subscribe";
 import { observable } from "../core/observable";
 import { queue } from "../mods/queue";
 
+export function combineLatest<T1, T2, T3, T4, T5, T6, T7, T8, T9>(
+  streams: [
+    AsyncIterable<T1>,
+    AsyncIterable<T2>,
+    AsyncIterable<T3>,
+    AsyncIterable<T4>,
+    AsyncIterable<T5>,
+    AsyncIterable<T6>,
+    AsyncIterable<T7>,
+    AsyncIterable<T8>,
+    AsyncIterable<T9>
+  ]
+): AsyncIterable<[T1, T2, T3, T4, T5, T6, T7, T8, T9]>;
+
+export function combineLatest<T1, T2, T3, T4, T5, T6, T7, T8>(
+  streams: [
+    AsyncIterable<T1>,
+    AsyncIterable<T2>,
+    AsyncIterable<T3>,
+    AsyncIterable<T4>,
+    AsyncIterable<T5>,
+    AsyncIterable<T6>,
+    AsyncIterable<T7>,
+    AsyncIterable<T8>
+  ]
+): AsyncIterable<[T1, T2, T3, T4, T5, T6, T7, T8]>;
+
+export function combineLatest<T1, T2, T3, T4, T5, T6, T7>(
+  streams: [
+    AsyncIterable<T1>,
+    AsyncIterable<T2>,
+    AsyncIterable<T3>,
+    AsyncIterable<T4>,
+    AsyncIterable<T5>,
+    AsyncIterable<T6>,
+    AsyncIterable<T7>
+  ]
+): AsyncIterable<[T1, T2, T3, T4, T5, T6, T7]>;
+
 export function combineLatest<T1, T2, T3, T4, T5, T6>(
-  s1: AsyncIterable<T1>,
-  s2: AsyncIterable<T2>,
-  s3: AsyncIterable<T3>,
-  s4: AsyncIterable<T4>,
-  s5: AsyncIterable<T5>,
-  s6: AsyncIterable<T6>
+  streams: [
+    AsyncIterable<T1>,
+    AsyncIterable<T2>,
+    AsyncIterable<T3>,
+    AsyncIterable<T4>,
+    AsyncIterable<T5>,
+    AsyncIterable<T6>
+  ]
 ): AsyncIterable<[T1, T2, T3, T4, T5, T6]>;
+
 export function combineLatest<T1, T2, T3, T4, T5>(
-  s1: AsyncIterable<T1>,
-  s2: AsyncIterable<T2>,
-  s3: AsyncIterable<T3>,
-  s4: AsyncIterable<T4>,
-  s5: AsyncIterable<T5>
+  streams: [
+    AsyncIterable<T1>,
+    AsyncIterable<T2>,
+    AsyncIterable<T3>,
+    AsyncIterable<T4>,
+    AsyncIterable<T5>
+  ]
 ): AsyncIterable<[T1, T2, T3, T4, T5]>;
+
 export function combineLatest<T1, T2, T3, T4>(
-  s1: AsyncIterable<T1>,
-  s2: AsyncIterable<T2>,
-  s3: AsyncIterable<T3>,
-  s4: AsyncIterable<T4>
+  streams: [
+    AsyncIterable<T1>,
+    AsyncIterable<T2>,
+    AsyncIterable<T3>,
+    AsyncIterable<T4>
+  ]
 ): AsyncIterable<[T1, T2, T3, T4]>;
+
 export function combineLatest<T1, T2, T3>(
-  s1: AsyncIterable<T1>,
-  s2: AsyncIterable<T2>,
-  s3: AsyncIterable<T3>
+  streams: [AsyncIterable<T1>, AsyncIterable<T2>, AsyncIterable<T3>]
 ): AsyncIterable<[T1, T2, T3]>;
+
 export function combineLatest<T1, T2>(
-  s1: AsyncIterable<T1>,
-  s2: AsyncIterable<T2>
+  streams: [AsyncIterable<T1>, AsyncIterable<T2>]
 ): AsyncIterable<[T1, T2]>;
+
+export function combineLatest<T1>(
+  streams: [AsyncIterable<T1>]
+): AsyncIterable<[T1]>;
+
 export function combineLatest<T>(
-  ...streams: AsyncIterable<T>[]
+  streams: AsyncIterable<T>[]
 ): AsyncIterable<T[]>;
+
 export function combineLatest<T>(
-  ...streams: AsyncIterable<T>[]
+  streams: AsyncIterable<T>[]
 ): AsyncIterable<T[]> {
   return observable<T[]>(
     queue(observer => {

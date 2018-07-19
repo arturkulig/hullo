@@ -11,17 +11,7 @@ const mount = document.createElement("div");
 document.body.appendChild(mount);
 mount.title = "mount";
 
-const containerStyle = {
-  position: "absolute",
-  transformOrigin: "0 0",
-  left: "50%",
-  top: "50%",
-  width: "10px",
-  height: "10px",
-  background: "#eee"
-};
-
-var targetSize = 25;
+const targetSize = 25;
 const startTime = Date.now();
 
 function App() {
@@ -34,7 +24,13 @@ function App() {
   return html.div(
     {
       style: {
-        ...containerStyle,
+        position: "absolute",
+        transformOrigin: "0 0",
+        left: "50%",
+        top: "50%",
+        width: "10px",
+        height: "10px",
+        background: "#eee",
         transform: pipe(
           phase$,
           map$((t: number) => {
@@ -126,7 +122,7 @@ function Dot(props: {
       )
     },
     innerText: pipe(
-      combineLatest(hover$, props.text),
+      combineLatest([hover$, props.text]),
       map$(([hover = false, text = ""]) => (hover ? `*${text}*` : text))
     )
   });
