@@ -1,4 +1,4 @@
-export type Transformer<IN, R> = (input: IN) => R;
+export type Transformer<IN, R> = (input: IN, ...args: any[]) => R;
 
 export function compose<IN, R1, R2, R3, R4, R5, R6, R7, R8, R9>(
   trans1: Transformer<IN, R1>,
