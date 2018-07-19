@@ -1,11 +1,11 @@
 import { observable } from "../core";
 import { subscribe } from "../utils";
 
-export function scan<T, RESULT>(
-  accumulator: (result: RESULT, item: T, ordinal: number) => RESULT,
+export function scan<ITEM, RESULT>(
+  accumulator: (result: RESULT, item: ITEM, ordinal: number) => RESULT,
   initial: RESULT
 ) {
-  return function* _scan(subject: Iterable<T>) {
+  return function* _scan(subject: Iterable<ITEM>) {
     let ordinal = 0;
     let result: RESULT = initial;
     for (const item of subject) {
@@ -15,15 +15,19 @@ export function scan<T, RESULT>(
   };
 }
 
-export function scan$<T, RESULT>(
-  accumulator: (
-    result: RESULT,
-    item: T,
-    ordinal: number
-  ) => Promise<RESULT> | RESULT,
+export function scan$<ITEM, RESULT>(
+  accumulator: (result: RESULT, item: ITEM, ordinal: number) => Promise<RESULT>,
+  initial: RESULT
+): ((subject: AsyncIterable<ITEM>) => AsyncIterable<RESULT>);
+export function scan$<ITEM, RESULT>(
+  accumulator: (result: RESULT, item: ITEM, ordinal: number) => RESULT,
+  initial: RESULT
+): ((subject: AsyncIterable<ITEM>) => AsyncIterable<RESULT>);
+export function scan$<ITEM, RESULT>(
+  accumulator: (result: RESULT, item: ITEM, ordinal: number) => any,
   initial: RESULT
 ) {
-  return function _scan$(subject: AsyncIterable<T>) {
+  return function _scan$(subject: AsyncIterable<ITEM>) {
     let ordinal = 0;
     let result: RESULT = initial;
 
