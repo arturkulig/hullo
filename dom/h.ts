@@ -1,18 +1,21 @@
-import { observable } from "../core/observable";
-import { atom } from "../core/atom";
-import { AsyncObserver } from "../core/observableTypes";
+import {
+  observable,
+  atom,
+  AsyncObserver,
+  subscribe,
+  Subscription,
+  isAsyncIterable
+} from "../core";
 import { combineLatest } from "../op/combineLatest";
 import { scan$ } from "../op/scan";
 import { map$ } from "../op/map";
-import { subscribe, Subscription } from "../utils/subscribe";
-import { isAsyncIterable } from "../utils/isAsyncIterable";
 
 type Chunk = HTMLElement | null;
 type Child = HTMLElement[] | Chunk;
 
 export type Props<E extends object> = {
   [K in keyof E]?: K extends "style"
-    ? { [id in keyof E[K]]?: E[K][id] | AsyncIterable<E[K][id]> }
+    ? { [RULE in keyof E[K]]?: E[K][RULE] | AsyncIterable<E[K][RULE]> }
     : E[K] extends ((event: infer EVENT) => any)
       ? (E[K] | AsyncObserver<EVENT, Error>)
       : (E[K] | AsyncIterable<E[K]>)
@@ -35,7 +38,8 @@ export function h<TAG extends keyof HTMLElementTagNameMap>(
 
     DEBUG && console.log(id, "creating");
 
-    const propsSubs: Subscription[] = [];
+    const subs: Subscription[] = [];
+    const readyConditions: Promise<any>[] = [];
 
     for (const p in props) {
       if (p === "style" && props[p]) {
@@ -44,12 +48,17 @@ export function h<TAG extends keyof HTMLElementTagNameMap>(
         for (const ruleName in style) {
           const rule = (style as any)[ruleName];
           if (rule && isAsyncIterable(rule)) {
-            propsSubs.push(
-              subscribe(rule, {
-                next(ruleValue) {
-                  DEBUG && console.log(id, `.style.${ruleName}\$`, rule);
-                  element.style[ruleName as any] = ruleValue;
-                }
+            readyConditions.push(
+              new Promise(ready => {
+                subs.push(
+                  subscribe(rule, {
+                    next(ruleValue) {
+                      DEBUG && console.log(id, `.style.${ruleName}\$`, rule);
+                      element.style[ruleName as any] = ruleValue;
+                      ready();
+                    }
+                  })
+                );
               })
             );
           } else if (rule) {
@@ -61,12 +70,17 @@ export function h<TAG extends keyof HTMLElementTagNameMap>(
         const staticProp = (props as any)[p];
 
         if (isAsyncIterable(staticProp)) {
-          propsSubs.push(
-            subscribe(staticProp, {
-              next(dynamicProp) {
-                DEBUG && console.log(id, `.${p}\$`, dynamicProp);
-                (element as any)[p] = dynamicProp;
-              }
+          readyConditions.push(
+            new Promise(ready => {
+              subs.push(
+                subscribe(staticProp, {
+                  next(dynamicProp) {
+                    DEBUG && console.log(id, `.${p}\$`, dynamicProp);
+                    (element as any)[p] = dynamicProp;
+                    ready();
+                  }
+                })
+              );
             })
           );
         } else {
@@ -87,92 +101,94 @@ export function h<TAG extends keyof HTMLElementTagNameMap>(
       }
     }
 
-    const flatChildren = flattenChildren(
-      setupLastAndNext(
-        combineLatest(
-          children.map(child => (isAsyncIterable(child) ? child : atom(child)))
+    if (children.length) {
+      const flatChildren = flattenChildren(
+        setupLastAndNext(
+          combineLatest(
+            children.map(
+              child => (isAsyncIterable(child) ? child : atom(child))
+            )
+          )
         )
-      )
-    );
+      );
 
-    const childrenSub =
-      children.length === 0
-        ? null
-        : subscribe(flatChildren, {
-            async next([lastElements, nextElements]: [Chunk[], Chunk[]]) {
-              DEBUG &&
-                console.log(
-                  id,
-                  "diff",
-                  lastElements.map(e => (e ? e.dataset.id : "null")),
-                  nextElements.map(e => (e ? e.dataset.id : "null"))
+      readyConditions.push(
+        new Promise(ready => {
+          subs.push(
+            subscribe(flatChildren, {
+              async next([lastElements, nextElements]: [Chunk[], Chunk[]]) {
+                DEBUG &&
+                  console.log(
+                    id,
+                    "diff",
+                    lastElements.map(e => (e ? e.dataset.id : "null")),
+                    nextElements.map(e => (e ? e.dataset.id : "null"))
+                  );
+
+                const length = Math.max(
+                  lastElements.length,
+                  nextElements.length
                 );
 
-              const length = Math.max(lastElements.length, nextElements.length);
+                for (let i = 0; i < length; i++) {
+                  const lastElement = lastElements[i] || null;
+                  const nextElement = nextElements[i] || null;
 
-              for (let i = 0; i < length; i++) {
-                const lastElement = lastElements[i] || null;
-                const nextElement = nextElements[i] || null;
-                if (lastElement === nextElement) {
-                  // same element
-                  DEBUG && console.log(id, `.${i}`, "same");
-                  continue;
-                }
-                if (lastElement == null && nextElement == null) {
-                  // both empty
-                  DEBUG && console.log(id, `.${i}`, "null");
-                  continue;
-                }
-                if (lastElement != null && nextElement == null) {
-                  // removing
-                  DEBUG && console.log(id, `.${i} removing`, lastElement);
-                  element.removeChild(lastElement);
-                  continue;
-                }
-                if (lastElement == null && nextElement != null) {
-                  // adding
-                  DEBUG && console.log(id, `.${i} adding`, nextElement);
-                  let latterPossibleElements = lastElements.slice(i);
-                  let latterElement: HTMLElement | null = null;
-                  for (const possibleNextElement of latterPossibleElements) {
-                    if (possibleNextElement) {
-                      latterElement = possibleNextElement;
-                      break;
+                  if (lastElement === nextElement) {
+                    // same element
+                    DEBUG && console.log(id, `.${i}`, "same");
+                  } else if (lastElement == null && nextElement == null) {
+                    // both empty
+                    DEBUG && console.log(id, `.${i}`, "same,null");
+                  } else if (lastElement != null && nextElement == null) {
+                    // removing
+                    DEBUG && console.log(id, `.${i} removing`, lastElement);
+                    element.removeChild(lastElement);
+                  } else if (lastElement == null && nextElement != null) {
+                    // adding
+                    DEBUG && console.log(id, `.${i} adding`, nextElement);
+                    let latterPossibleElements = lastElements.slice(i);
+                    let latterElement: HTMLElement | null = null;
+                    for (const possibleNextElement of latterPossibleElements) {
+                      if (possibleNextElement) {
+                        latterElement = possibleNextElement;
+                        break;
+                      }
                     }
+                    if (latterElement) {
+                      element.insertBefore(nextElement, latterElement);
+                    } else {
+                      element.appendChild(nextElement);
+                    }
+                    continue;
+                  } else if (lastElement != null && nextElement != null) {
+                    // replacing
+                    DEBUG &&
+                      console.log(
+                        id,
+                        `.${i} replacing`,
+                        lastElement,
+                        "for",
+                        nextElement
+                      );
+                    element.replaceChild(nextElement, lastElement);
                   }
-                  if (latterElement) {
-                    element.insertBefore(nextElement, latterElement);
-                  } else {
-                    element.appendChild(nextElement);
-                  }
-                  continue;
                 }
-                if (lastElement != null && nextElement != null) {
-                  // replacing
-                  DEBUG &&
-                    console.log(
-                      id,
-                      `.${i} replacing`,
-                      lastElement,
-                      "for",
-                      nextElement
-                    );
-                  element.replaceChild(nextElement, lastElement);
-                }
+                ready();
               }
-            }
-          });
+            })
+          );
+        })
+      );
+    }
 
-    observer.next(element);
+    Promise.all(readyConditions).then(() => observer.next(element));
 
     return () => {
       while (element.firstElementChild) {
         element.removeChild(element.firstElementChild);
       }
-      if (childrenSub && !childrenSub.closed) {
-        childrenSub.unsubscribe();
-      }
-      for (const propSub of propsSubs) {
+      for (const propSub of subs) {
         if (!propSub.closed) {
           propSub.unsubscribe();
         }
