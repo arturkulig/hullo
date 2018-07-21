@@ -1,4 +1,4 @@
-import { subscribe } from "../utils/subscribe";
+import { subscribe } from "../core";
 
 export function end<T>(subject: AsyncIterable<T>) {
   return new Promise<void>((resolve, reject) =>

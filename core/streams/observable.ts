@@ -8,7 +8,7 @@ import {
   AwaitingConsumer,
   Closed,
   IncomingCompletion
-} from "../core/observableTypes";
+} from "./observableTypes";
 
 const INITIAL: Initial = { type: "initial" };
 const CLOSED: Closed = { type: "closed" };

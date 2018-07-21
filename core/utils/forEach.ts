@@ -1,6 +1,6 @@
-import { isIterable } from "../utils/isIterable";
-import { isAsyncIterable } from "../utils/isAsyncIterable";
-import { subscribe, Subscription } from "../utils/subscribe";
+import { isIterable } from "./isIterable";
+import { isAsyncIterable } from "./isAsyncIterable";
+import { subscribe, Subscription } from "./subscribe";
 
 export interface IterableConsumer<T> {
   (value: T, ordinal: number): void;

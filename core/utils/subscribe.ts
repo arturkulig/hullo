@@ -1,4 +1,4 @@
-import { AsyncObserver } from "../core/observableTypes";
+import { AsyncObserver } from "../streams";
 
 export interface Subscription {
   closed: boolean;

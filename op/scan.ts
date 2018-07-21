@@ -1,5 +1,4 @@
-import { observable } from "../core";
-import { subscribe } from "../utils";
+import { observable, subscribe } from "../core";
 
 export function scan<ITEM, RESULT>(
   accumulator: (result: RESULT, item: ITEM, ordinal: number) => RESULT,

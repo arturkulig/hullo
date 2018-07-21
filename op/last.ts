@@ -1,4 +1,4 @@
-import { subscribe } from "../utils";
+import { subscribe } from "../core";
 
 export function last<T>(subject: Iterable<T>) {
   let result: T | undefined;

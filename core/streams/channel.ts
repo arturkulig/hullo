@@ -1,6 +1,6 @@
-import { AsyncObserver } from "../core/observableTypes";
-import { queue } from "../mods/queue";
-import { observable } from "../core/observable";
+import { AsyncObserver } from "../streams";
+import { queue } from "../mods";
+import { observable } from "../streams";
 
 export function channel<T, ERR = Error>(): AsyncIterable<T> &
   AsyncObserver<T, ERR> {

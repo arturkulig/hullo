@@ -1,4 +1,4 @@
-import { subscribe } from "../utils/subscribe";
+import { subscribe } from "../core";
 
 export function first<T>(subject: Iterable<T>) {
   for (const item of subject) {

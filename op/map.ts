@@ -1,5 +1,4 @@
-import { observable } from "../core/observable";
-import { subscribe } from "../utils/subscribe";
+import { observable, subscribe } from "../core";
 
 export interface OrderedTransformer<T, U> {
   (value: T, ordinal: number): U;

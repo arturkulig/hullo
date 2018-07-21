@@ -1,6 +1,4 @@
-import { subscribe } from "../utils/subscribe";
-import { observable } from "../core/observable";
-import { queue } from "../mods/queue";
+import { subscribe, observable, queue } from "../core";
 
 export function combineLatest<T1, T2, T3, T4, T5, T6, T7, T8, T9>(
   streams: [

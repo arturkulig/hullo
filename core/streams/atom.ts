@@ -1,15 +1,17 @@
-import { AsyncObserver } from "../core/observableTypes";
-import { queue } from "../mods/queue";
-import { observable } from "../core/observable";
+import { AsyncObserver } from "../streams";
+import { queue } from "../mods";
+import { observable } from "../streams";
 
-export function atom<T, ERR = Error>(
-  initial: T
-): AsyncIterable<T> & AsyncObserver<T, ERR> & { readonly state: T } {
+export interface Atom<T, ERR> extends AsyncIterable<T>, AsyncObserver<T, ERR> {
+  valueOf(): T;
+}
+
+export function atom<T, ERR = Error>(initial: T): Atom<T, ERR> {
   let state: T = initial;
   const observers: Array<AsyncObserver<T, ERR>> = [];
 
   return {
-    get state() {
+    valueOf() {
       return state;
     },
     [Symbol.asyncIterator]() {

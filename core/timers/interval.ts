@@ -1,5 +1,5 @@
-import { observable } from "../core/observable";
-import { queue } from "../mods/queue";
+import { observable } from "../streams";
+import { queue } from "../mods";
 
 export function interval(timeInMs: number) {
   return observable<number>(

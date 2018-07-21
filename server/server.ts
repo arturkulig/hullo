@@ -1,4 +1,4 @@
-import { atom } from "../core/atom";
+import { atom } from "../core";
 
 type Handler<
   STATE,
@@ -38,11 +38,11 @@ type ServerActions<
   OUTS extends { [id in keyof INS]: any }
 > = { [id in keyof INS]: Action<INS, OUTS, id> };
 
-type Server<
+export type Server<
   STATE,
   INS extends object,
   OUTS extends { [id in keyof INS]: any }
-> = ServerActions<INS, OUTS> & AsyncIterable<STATE> & { readonly state: STATE };
+> = ServerActions<INS, OUTS> & AsyncIterable<STATE> & { valueOf(): STATE };
 
 export function server<
   STATE,
@@ -57,9 +57,7 @@ export function server<
   const state$ = atom<STATE>(initialState);
 
   const iterable = {
-    get state() {
-      return state$.state;
-    },
+    valueOf: state$.valueOf,
     [Symbol.asyncIterator]() {
       return state$[Symbol.asyncIterator]();
     }
@@ -89,7 +87,7 @@ export function server<
     while (calls.length) {
       const { action, input, reject, resolve } = calls.shift()!;
       try {
-        const result = await handlers[action](input, state$.state);
+        const result = await handlers[action](input, state$.valueOf());
         resolve(result.reply);
         if (result.state !== undefined) {
           await state$.next(result.state);

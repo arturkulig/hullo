@@ -1,6 +1,4 @@
-import { observable } from "../core/observable";
-import { subscribe, Subscription } from "../utils/subscribe";
-import { queue } from "../mods/queue";
+import { observable, subscribe, Subscription, queue } from "../core";
 
 export function* flatten<T>(subject: Iterable<Iterable<T>>): Iterable<T> {
   for (const items of subject) {

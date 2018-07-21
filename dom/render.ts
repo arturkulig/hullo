@@ -1,4 +1,4 @@
-import { subscribe } from "../utils/subscribe";
+import { subscribe } from "../core";
 
 export function render(mount: HTMLElement, root$: AsyncIterable<HTMLElement>) {
   let last: HTMLElement | null = null;

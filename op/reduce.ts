@@ -1,4 +1,4 @@
-import { subscribe } from "../utils/subscribe";
+import { subscribe } from "../core";
 
 export function reduce<T, RESULT>(
   accumulator: (result: RESULT, item: T, ordinal: number) => RESULT,

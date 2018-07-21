@@ -1,8 +1,8 @@
-import { AsyncObserver } from "../core/observableTypes";
+import { AsyncObserver } from "../streams";
 import { subject } from "../mods/subject";
 import { queue } from "../mods/queue";
 import { hot } from "../mods/hot";
-import { observable } from "../core/observable";
+import { observable } from "../streams";
 
 export function expose<T, ERR>(
   output: (input$: AsyncIterable<T>) => AsyncIterable<T>

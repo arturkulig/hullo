@@ -1,6 +1,4 @@
-import { observable } from "../core/observable";
-import { Subscription, subscribe } from "../utils/subscribe";
-import { queue } from "../mods/queue";
+import { observable, Subscription, subscribe, queue } from "../core";
 
 export function switchMap<T>(
   subject: AsyncIterable<AsyncIterable<T>>

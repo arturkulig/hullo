@@ -2,13 +2,13 @@
   "name": "hullo",
   "version": "0.1.0",
   "description": "",
-  "main": "./index.ts",
+  "main": "./core/index.ts",
   "scripts": {
-    "index": "find . -type d -depth 1 | sed \"/node_modules/d\" | sed \"/.git/d\" | while read -r loc; do find \"$loc\" -type f -iname \"*.ts\" -depth 1 | sed -e \"/index/d\" | sed -E \"s@$loc/(.*)\\.ts@export * from './\\1';@\" > $loc/index.ts; done",
+    "index": "./index-folders.sh",
     "check": "npm run index; tsc --noEmit",
     "build": "npm run index; tsc",
     "prepublish": "npm run build",
-    "clean": "find . -iname \"*.js\" -maxdepth 2 -delete; npm run index;"
+    "clean": "find . -iname \"*.js\" ! -path \"*node_modules*\" ! -path \"*.git*\" -delete"
   },
   "keywords": [],
   "author": "",

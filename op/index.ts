@@ -1,6 +1,5 @@
 export * from './scan';
 export * from './filter';
-export * from './switchMap.test';
 export * from './last';
 export * from './take';
 export * from './first';
@@ -8,7 +7,6 @@ export * from './map';
 export * from './switchMap';
 export * from './end';
 export * from './nth';
-export * from './combineLatest';
 export * from './reduce';
 export * from './flatten';
 export * from './merge';

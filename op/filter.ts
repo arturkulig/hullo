@@ -1,6 +1,5 @@
 import { OrderedTransformer } from "../op/map";
-import { observable } from "../core";
-import { subscribe } from "../utils";
+import { observable, subscribe } from "../core";
 
 export function filter<T>(filter: OrderedTransformer<T, boolean>) {
   return function* _filter(subject: Iterable<T>): Iterable<T> {

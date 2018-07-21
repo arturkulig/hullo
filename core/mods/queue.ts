@@ -1,4 +1,4 @@
-import { AsyncProducer, AsyncObserver } from "../core/observableTypes";
+import { AsyncProducer, AsyncObserver } from "../streams";
 
 export function queue<T, ERR = Error>(producer: AsyncProducer<T, ERR>) {
   return (innerObserver: AsyncObserver<T, ERR>) => {
