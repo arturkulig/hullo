@@ -1,11 +1,8 @@
-import { html } from "../dom/html";
-import { render } from "../dom/render";
-import { interval } from "../timers/interval";
+import { html, render } from "../dom";
+import { interval, atom, subject } from "../core";
 import { map$ } from "../op/map";
-import { pipe } from "../utils/pipe";
-import { atom } from "../core/atom";
-import { subject } from "../mods/subject";
-import { combineLatest } from "../op";
+import { combineLatest } from "../op/combineLatest";
+import { pipe } from "../utils";
 
 const mount = document.createElement("div");
 document.body.appendChild(mount);

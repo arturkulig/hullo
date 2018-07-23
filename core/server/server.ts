@@ -1,4 +1,4 @@
-import { atom } from "../core";
+import { atom } from "../streams";
 
 type Handler<
   STATE,
