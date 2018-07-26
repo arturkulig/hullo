@@ -2,7 +2,7 @@
   "name": "hullo",
   "version": "0.1.0",
   "description": "",
-  "main": "./core/index.ts",
+  "main": "./core",
   "scripts": {
     "index": "./index-folders.sh",
     "check": "npm run index; tsc --noEmit",
@@ -14,10 +14,14 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/ws": "^5.1.2",
     "jest": "^23.1.0",
     "prettier": "^1.13.5",
     "ts-jest": "^22.4.6",
     "ts-node": "^6.1.0",
     "typescript": "^2.9.1"
+  },
+  "dependencies": {
+    "ws": "^6.0.0"
   }
 }

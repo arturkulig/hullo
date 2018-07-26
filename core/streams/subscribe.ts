@@ -1,24 +1,17 @@
-import { AsyncObserver } from "../streams";
-
 export interface Subscription {
   closed: boolean;
   unsubscribe(): void;
 }
 
-type Subscriber<T, ERR> = {
-  [id in keyof AsyncObserver<T, ERR>]?: AsyncObserver<
-    T,
-    ERR
-  >[id] extends () => Promise<void>
-    ? (() => Promise<void> | void)
-    : AsyncObserver<T, ERR>[id] extends (input: infer INPUT) => Promise<void>
-      ? ((input: INPUT) => Promise<void> | void)
-      : AsyncObserver<T, ERR>[id]
+type Subscriber<T> = {
+  next?(value: T): Promise<any> | any;
+  error?(error: any): Promise<any> | any;
+  complete?(): Promise<any> | any;
 };
 
-export function subscribe<T, ERR = Error>(
+export function subscribe<T = Error>(
   stream: AsyncIterable<T>,
-  observer: Subscriber<T, ERR>
+  observer: Subscriber<T>
 ) {
   const subscription: Subscription = {
     closed: false,
@@ -28,9 +21,9 @@ export function subscribe<T, ERR = Error>(
   return subscription;
 }
 
-function iterate<T, ERR>(
+function iterate<T>(
   stream: AsyncIterable<T>,
-  subscriber: Subscriber<T, ERR>,
+  subscriber: Subscriber<T>,
   subscription: Subscription
 ) {
   const iterator = stream[Symbol.asyncIterator]();
@@ -43,9 +36,9 @@ function iterate<T, ERR>(
   executeIteration(iterator, subscriber, subscription);
 }
 
-function executeIteration<T, ERR>(
+function executeIteration<T>(
   iterator: AsyncIterator<T>,
-  subscriber: Subscriber<T, ERR>,
+  subscriber: Subscriber<T>,
   subscription: Subscription
 ) {
   try {
@@ -53,7 +46,7 @@ function executeIteration<T, ERR>(
       .next()
       .then(
         step =>
-          handleIterationStep<T, ERR>(iterator, subscriber, subscription, step),
+          handleIterationStep<T>(iterator, subscriber, subscription, step),
         error => handleIterationError(subscriber, subscription, error)
       );
   } catch (e) {
@@ -61,9 +54,9 @@ function executeIteration<T, ERR>(
   }
 }
 
-function handleIterationStep<T, ERR>(
+function handleIterationStep<T>(
   iterator: AsyncIterator<T>,
-  subscriber: Subscriber<T, ERR>,
+  subscriber: Subscriber<T>,
   subscription: Subscription,
   { value, done }: IteratorResult<T>
 ) {
@@ -76,16 +69,19 @@ function handleIterationStep<T, ERR>(
       return subscriber.complete();
     }
   } else if (subscriber.next) {
-    return (muffle(subscriber.next, value) || Promise.resolve()).then(() =>
-      executeIteration<T, ERR>(iterator, subscriber, subscription)
-    );
+    const muffled = muffle(subscriber.next, value);
+    return muffled
+      ? muffled.then(() => {
+          executeIteration<T>(iterator, subscriber, subscription);
+        })
+      : executeIteration<T>(iterator, subscriber, subscription);
   }
 }
 
-function handleIterationError<T, ERR>(
-  subscriber: Subscriber<T, ERR>,
+function handleIterationError<T>(
+  subscriber: Subscriber<T>,
   subscription: Subscription,
-  error: ERR
+  error: any
 ) {
   if (subscription.closed) {
     return;
