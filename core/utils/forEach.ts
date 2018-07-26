@@ -1,6 +1,6 @@
 import { isIterable } from "./isIterable";
 import { isAsyncIterable } from "./isAsyncIterable";
-import { subscribe, Subscription } from "./subscribe";
+import { subscribe, Subscription } from "../streams/subscribe";
 
 export interface IterableConsumer<T> {
   (value: T, ordinal: number): void;
@@ -30,7 +30,7 @@ export function forEach<T>(
     return;
   } else if (isAsyncIterable(collection)) {
     let ordinal = 0;
-    return subscribe<T, Error>(collection, {
+    return subscribe<T>(collection, {
       next(v: T) {
         return actor(v, ordinal++);
       }

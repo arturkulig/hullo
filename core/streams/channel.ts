@@ -1,33 +1,40 @@
-import { AsyncObserver } from "../streams";
-import { queue } from "../mods";
-import { observable } from "../streams";
+import { AsyncObserver } from "./observableTypes";
+import { observable } from "./observable";
+import { duplex, Duplex } from "./duplex";
 
-export function channel<T, ERR = Error>(): AsyncIterable<T> &
-  AsyncObserver<T, ERR> {
-  const observers: Array<AsyncObserver<T, ERR>> = [];
+export interface Channel<T> extends Duplex<T, T> {}
 
-  return {
-    [Symbol.asyncIterator]() {
-      return observable<T, ERR>(
-        queue(observer => {
-          observers.push(observer);
-          return () => {
-            observers.splice(observers.indexOf(observer), 1);
-          };
-        })
-      )[Symbol.asyncIterator]();
+export function channel<T>(): Channel<T> {
+  const observers: Array<AsyncObserver<T>> = [];
+
+  return duplex(
+    {
+      get closed() {
+        return observers.reduce((r: boolean, i) => r && i.closed, true);
+      },
+      next(value: T) {
+        return Promise.all(
+          observers.map(observer => observer.next(value))
+        ).then(noop);
+      },
+      error(error) {
+        return Promise.all(
+          observers.map(observer => observer.error(error))
+        ).then(noop);
+      },
+      complete() {
+        return Promise.all(observers.map(observer => observer.complete())).then(
+          noop
+        );
+      }
     },
-    get closed() {
-      return observers.reduce((r: boolean, i) => r && i.closed, true);
-    },
-    async next(value: T) {
-      await Promise.all(observers.map(observer => observer.next(value)));
-    },
-    async error(error: ERR) {
-      await Promise.all(observers.map(observer => observer.error(error)));
-    },
-    async complete() {
-      await Promise.all(observers.map(observer => observer.complete()));
-    }
-  };
+    observable<T>(observer => {
+      observers.push(observer);
+      return () => {
+        observers.splice(observers.indexOf(observer), 1);
+      };
+    })
+  );
 }
+
+function noop() {}

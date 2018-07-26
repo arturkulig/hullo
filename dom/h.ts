@@ -17,7 +17,7 @@ export type Props<E extends object> = {
   [K in keyof E]?: K extends "style"
     ? { [RULE in keyof E[K]]?: E[K][RULE] | AsyncIterable<E[K][RULE]> }
     : E[K] extends ((event: infer EVENT) => any)
-      ? (E[K] | AsyncObserver<EVENT, Error>)
+      ? (E[K] | AsyncObserver<EVENT>)
       : (E[K] | AsyncIterable<E[K]>)
 };
 
