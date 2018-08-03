@@ -1,8 +1,8 @@
 import { html, render } from "../dom";
-import { interval, atom, subject } from "../core";
+import { interval, atom, pipe } from "../core";
 import { map$ } from "../op/map";
+import { subject } from "../op/subject";
 import { combineLatest } from "../op/combineLatest";
-import { pipe } from "../utils";
 
 const mount = document.createElement("div");
 document.body.appendChild(mount);
@@ -128,10 +128,12 @@ function Dot(props: {
 const { unsubscribe: stop } = render(mount, App());
 
 declare global {
-  const module: any;
+  interface NodeModule {
+    hot: any;
+  }
 }
 
-if (module.hot) {
+if ("hot" in module && module.hot) {
   module.hot.dispose(() => {
     document.body.removeChild(mount);
     stop();
