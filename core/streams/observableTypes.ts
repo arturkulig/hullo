@@ -1,7 +1,7 @@
-export interface AsyncObserver<T, ERR> {
+export interface AsyncObserver<T> {
   closed: boolean;
   next(value: T): Promise<void>;
-  error(error: ERR): Promise<void>;
+  error(error: any): Promise<void>;
   complete(): Promise<void>;
 }
 
@@ -11,8 +11,8 @@ export interface CancellationFunction {
 
 export type Cancellation = CancellationFunction | void;
 
-export interface AsyncProducer<T, ERR> {
-  (observer: AsyncObserver<T, ERR>): Cancellation;
+export interface AsyncProducer<T> {
+  (observer: AsyncObserver<T>): Cancellation;
 }
 
 export interface Initial {
@@ -33,15 +33,15 @@ export interface IncomingCompletion extends Incoming {
   type: "incoming:completion";
 }
 
-export interface IncomingError<ERR> extends Incoming {
+export interface IncomingError extends Incoming {
   type: "incoming:error";
-  error: ERR;
+  error: any;
 }
 
-export interface AwaitingConsumer<T, ERR> {
+export interface AwaitingConsumer<T> {
   type: "consumer";
   feed: (value: IteratorResult<T>) => void;
-  interrupt: (error: ERR) => void;
+  interrupt: (error: any) => void;
 }
 
 export interface Closed {

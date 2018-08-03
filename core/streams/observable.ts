@@ -17,30 +17,26 @@ const ITERATOR_COMPLETION: IteratorResult<any> = {
   value: undefined
 };
 
-export function observable<T, ERR = Error>(
-  producer: AsyncProducer<T, ERR>
-): AsyncIterable<T> {
+export function observable<T>(producer: AsyncProducer<T>): AsyncIterable<T> {
   return {
     [Symbol.asyncIterator]() {
-      return createIterator<T, ERR>(producer);
+      return createIterator<T>(producer);
     }
   };
 }
 
-type State<T, ERR> =
+type State<T> =
   | Initial
   | IncomingValue<T>
   | IncomingCompletion
-  | IncomingError<ERR>
-  | AwaitingConsumer<T, ERR>
+  | IncomingError
+  | AwaitingConsumer<T>
   | Closed;
 
-function createIterator<T, ERR>(
-  producer: AsyncProducer<T, ERR>
-): AsyncIterator<T> {
-  let state: State<T, ERR> = INITIAL;
+function createIterator<T>(producer: AsyncProducer<T>): AsyncIterator<T> {
+  let state: State<T> = INITIAL;
 
-  const observer: AsyncObserver<T, ERR> = {
+  const observer: AsyncObserver<T> = {
     get closed() {
       return state.type === "closed";
     },
@@ -49,7 +45,7 @@ function createIterator<T, ERR>(
         pushIncomingMessage("incoming:value", confirm, reject, value, undefined)
       );
     },
-    error(error: ERR) {
+    error(error) {
       return new Promise<void>((confirm, reject) =>
         pushIncomingMessage("incoming:error", confirm, reject, undefined, error)
       );
@@ -138,7 +134,7 @@ function createIterator<T, ERR>(
         return Promise.resolve(ITERATOR_COMPLETION);
 
       default:
-        return Promise.reject(new ImpossibleState<T, ERR>(state));
+        return Promise.reject(new ImpossibleState<T>(state));
     }
   }
 
@@ -156,17 +152,17 @@ function createIterator<T, ERR>(
     messageType: (
       | IncomingValue<T>
       | IncomingCompletion
-      | IncomingError<ERR>)["type"],
+      | IncomingError)["type"],
     messageConfirm: (
       | IncomingValue<T>
       | IncomingCompletion
-      | IncomingError<ERR>)["confirm"],
+      | IncomingError)["confirm"],
     messageReject: (
       | IncomingValue<T>
       | IncomingCompletion
-      | IncomingError<ERR>)["reject"],
+      | IncomingError)["reject"],
     messageValue: (IncomingValue<T>)["value"] | undefined,
-    messageError: (IncomingError<ERR>)["error"] | undefined
+    messageError: (IncomingError)["error"] | undefined
   ) {
     switch (state.type) {
       case "initial":
@@ -202,15 +198,15 @@ function createIterator<T, ERR>(
     messageType: (
       | IncomingValue<T>
       | IncomingCompletion
-      | IncomingError<ERR>)["type"],
+      | IncomingError)["type"],
     messageConfirm: (
       | IncomingValue<T>
       | IncomingCompletion
-      | IncomingError<ERR>)["confirm"],
+      | IncomingError)["confirm"],
     messageValue: (IncomingValue<T>)["value"] | undefined,
-    messageError: (IncomingError<ERR>)["error"] | undefined,
-    consumerFeed: AwaitingConsumer<T, ERR>["feed"],
-    consumerInterrupt: AwaitingConsumer<T, ERR>["interrupt"]
+    messageError: (IncomingError)["error"] | undefined,
+    consumerFeed: AwaitingConsumer<T>["feed"],
+    consumerInterrupt: AwaitingConsumer<T>["interrupt"]
   ) {
     switch (messageType) {
       case "incoming:value":
@@ -256,8 +252,8 @@ export class AlreadyAwaiting extends Exception {
   message = "Already awaiting for next iterator result";
 }
 
-export class ImpossibleState<T, ERR> extends Exception {
-  constructor(private state: State<T, ERR>) {
+export class ImpossibleState<T> extends Exception {
+  constructor(private state: State<T>) {
     super();
   }
   get message() {
