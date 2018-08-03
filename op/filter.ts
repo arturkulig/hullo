@@ -1,4 +1,4 @@
-import { OrderedTransformer } from "../op/map";
+import { OrderedTransformer } from "./map";
 import { observable, subscribe } from "../core";
 
 export function filter<T>(filter: OrderedTransformer<T, boolean>) {

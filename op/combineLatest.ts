@@ -1,4 +1,5 @@
-import { subscribe, observable, queue } from "../core";
+import { subscribe, observable } from "../core";
+import { buffer } from "./buffer";
 
 export function combineLatest<T1, T2, T3, T4, T5, T6, T7, T8, T9>(
   streams: [
@@ -88,8 +89,8 @@ export function combineLatest<T>(
 export function combineLatest<T>(
   streams: AsyncIterable<T>[]
 ): AsyncIterable<T[]> {
-  return observable<T[]>(
-    queue(observer => {
+  return buffer(
+    observable<T[]>(observer => {
       let last = new Array<T>(streams.length);
 
       let presentAll = false;

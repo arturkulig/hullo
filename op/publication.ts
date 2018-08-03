@@ -1,7 +1,6 @@
 import { AsyncObserver } from "../core/streams/observableTypes";
 import { observable } from "../core/streams/observable";
 import { subject } from "./subject";
-import { queue } from "../core/streams/queue";
 import { Subscription, subscribe } from "../core/streams/subscribe";
 
 interface TopicMessage<T, TOPICS extends string> {
@@ -24,24 +23,22 @@ export function publication<T, TOPICS extends string>(
     return (
       outputs[topic] ||
       (outputs[topic] = subject<T>(
-        observable<T>(
-          queue(observer => {
-            receivers[topic] = observer;
+        observable<T>(observer => {
+          receivers[topic] = observer;
 
-            if (!originSub) {
-              originSub = subscribeOrigin();
-            }
+          if (!originSub) {
+            originSub = subscribeOrigin();
+          }
 
-            return () => {
-              if (originSub) {
-                if (!originSub.closed) {
-                  originSub.unsubscribe();
-                }
-                originSub = null;
+          return () => {
+            if (originSub) {
+              if (!originSub.closed) {
+                originSub.unsubscribe();
               }
-            };
-          })
-        )
+              originSub = null;
+            }
+          };
+        })
       ))
     );
   };

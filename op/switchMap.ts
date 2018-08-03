@@ -1,22 +1,24 @@
-import { observable, Subscription, subscribe, queue } from "../core";
+import { observable, Subscription, subscribe } from "../core";
+import { buffer } from "./buffer";
 
 export function switchMap<T>(
   subject: AsyncIterable<AsyncIterable<T>>
 ): AsyncIterable<T> {
-  return observable<T>(
-    queue(observer => {
+  return buffer(
+    observable<T>(observer => {
       let innerSub: Subscription | null = null;
+
       const outerSub = subscribe(subject, {
-        async next(inner: AsyncIterable<T>) {
+        next(inner: AsyncIterable<T>) {
           if (innerSub && !innerSub.closed) {
             innerSub.unsubscribe();
           }
           innerSub = subscribe(inner, {
-            async next(value: T) {
+            next(value: T) {
               if (observer.closed) {
                 return;
               }
-              await observer.next(value);
+              return observer.next(value);
             },
             error: observer.error
           });

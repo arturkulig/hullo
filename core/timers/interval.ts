@@ -1,16 +1,22 @@
-import { observable } from "../streams";
-import { queue } from "../mods";
+import { observable } from "../streams/observable";
 
 export function interval(timeInMs: number) {
-  return observable<number>(
-    queue(observer => {
-      observer.next(Date.now());
-      const token = setInterval(() => {
-        observer.next(Date.now());
+  return observable<number>(observer => {
+    let token: NodeJS.Timer | null = null;
+
+    tick();
+
+    return () => {
+      token && clearInterval(token);
+    };
+
+    function tick() {
+      if (observer.closed) {
+        return;
+      }
+      token = setTimeout(() => {
+        observer.next(Date.now()).then(tick);
       }, timeInMs);
-      return () => {
-        clearInterval(token);
-      };
-    })
-  );
+    }
+  });
 }

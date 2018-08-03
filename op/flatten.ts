@@ -1,4 +1,5 @@
-import { observable, subscribe, Subscription, queue } from "../core";
+import { observable, subscribe, Subscription } from "../core";
+import { buffer } from "./buffer";
 
 export function* flatten<T>(subject: Iterable<Iterable<T>>): Iterable<T> {
   for (const items of subject) {
@@ -11,8 +12,8 @@ export function* flatten<T>(subject: Iterable<Iterable<T>>): Iterable<T> {
 export function flatten$<T>(
   subject: AsyncIterable<AsyncIterable<T>>
 ): AsyncIterable<T> {
-  return observable<T>(
-    queue(observer => {
+  return buffer(
+    observable<T>(observer => {
       let innerSubs: Subscription[] = [];
       const outerSub = subscribe(subject, {
         next(inner$) {
