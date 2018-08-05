@@ -2,19 +2,19 @@ import { AsyncObserver } from "./observableTypes";
 
 export interface Duplex<OUT, IN>
   extends AsyncIterable<IN>,
-    AsyncObserver<OUT> {}
+  AsyncObserver<OUT> { }
 
 export function duplex<OUT, IN>(
-  in$: AsyncObserver<OUT>,
-  out$: AsyncIterable<IN>
+  outgoing: AsyncObserver<OUT>,
+  incoming: AsyncIterable<IN>
 ): Duplex<OUT, IN> {
   return {
-    [Symbol.asyncIterator]: out$[Symbol.asyncIterator],
+    [Symbol.asyncIterator]: incoming[Symbol.asyncIterator],
     get closed() {
-      return in$.closed;
+      return outgoing.closed;
     },
-    next: in$.next,
-    error: in$.error,
-    complete: in$.complete
+    next: outgoing.next,
+    error: outgoing.error,
+    complete: outgoing.complete
   };
 }
