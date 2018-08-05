@@ -9,24 +9,32 @@ import {
 import { subject } from "../op/subject";
 import { buffer } from "../op/buffer";
 
-export type OpeningPacket = [number];
-export type ClosingPacket = [number, true];
-export type MessagePacket<T> = [number, false, T];
-export type SplitPacket<T> = OpeningPacket | ClosingPacket | MessagePacket<T>;
+export type CommsOpeningPacket = [number];
+export type CommsClosingPacket = [number, true];
+export type CommsMessagePacket<T> = [number, false, T];
+export type CommsPacket<T> =
+  | CommsOpeningPacket
+  | CommsClosingPacket
+  | CommsMessagePacket<T>;
 
 export enum Oddity {
   even,
   odd
 }
 
-export function splitToChannels<OUT, IN>(
-  chnls: Duplex<SplitPacket<OUT>, SplitPacket<IN>>,
+export interface Comms<OUT, IN> {
+  incoming: AsyncIterable<Duplex<OUT, IN>>;
+  open(): Duplex<OUT, IN>;
+}
+
+export function comms<OUT, IN>(
+  chnls: Duplex<CommsPacket<OUT>, CommsPacket<IN>>,
   oddity: Oddity
-) {
+): Comms<OUT, IN> {
   const incomingByID: { [id: string]: AsyncObserver<IN> } = {};
   let maxID = 0;
 
-  const incoming$ = buffer(
+  const incoming = buffer(
     subject(
       observable<Duplex<OUT, IN>>(observer => {
         const inSub = subscribe(chnls, {
@@ -45,7 +53,7 @@ export function splitToChannels<OUT, IN>(
 
             maxID = Math.max(maxID, packet[0]);
             if (packet.length === 1 && !incomingByID[packet[0]]) {
-              return observer.next(openComms(packet[0]));
+              return observer.next(establish(packet[0]));
             }
 
             if (typeof packet[1] !== "boolean") {
@@ -70,7 +78,7 @@ export function splitToChannels<OUT, IN>(
   );
 
   return {
-    incoming$,
+    incoming,
     open
   };
 
@@ -82,12 +90,12 @@ export function splitToChannels<OUT, IN>(
         ? 2
         : 1);
     maxID = nextID;
-    const comms = openComms(nextID);
+    const comms = establish(nextID);
     chnls.next([nextID]);
     return comms;
   }
 
-  function openComms(id: number) {
+  function establish(id: number) {
     const in$ = channel<IN>();
     incomingByID[id] = in$;
 
