@@ -1,13 +1,12 @@
 import { Server, ServerOptions, Data } from "ws";
-import { observable } from "../core/streams/observable";
+import { observable, duplex, Duplex, AsyncObserver } from "../core";
 import { subject } from "../op/subject";
 import { buffer } from "../op/buffer";
-import { duplex, Duplex } from "../core/streams/duplex";
 
 export interface WebsocketConnection {
   id: number;
   ip: string | undefined;
-  io: Duplex<Data, Data>;
+  io: Duplex<ArrayBufferLike, ArrayBufferLike>;
 }
 
 export function websocketServer(opts: ServerOptions) {
@@ -23,22 +22,49 @@ export function websocketServer(opts: ServerOptions) {
 
           const in$ = subject(
             buffer(
-              observable<Data>(incomingMessageObserver => {
-                socket.on("message", incomingMessageObserver.next);
+              observable<ArrayBufferLike>(incomingMessageObserver => {
+                socket.binaryType = "arraybuffer";
+                socket.on("message", onMessage);
                 socket.on("error", incomingMessageObserver.error);
                 socket.on("close", incomingMessageObserver.complete);
+                socket.on("ping", onPing);
+
+                return () => {
+                  socket.off("message", onMessage);
+                  socket.off("error", incomingMessageObserver.error);
+                  socket.off("close", incomingMessageObserver.complete);
+                  socket.off("ping", onPing);
+                };
+
+                function onMessage(msg: Data) {
+                  incomingMessageObserver.next(
+                    msg instanceof Buffer
+                      ? bufferToArrayBuffer(msg)
+                      : msg instanceof Array
+                        ? bufferToArrayBuffer(Buffer.concat(msg))
+                        : typeof msg === "string"
+                          ? bufferToArrayBuffer(Buffer.from(msg, "utf-8"))
+                          : msg
+                  );
+                }
+
+                function onPing() {
+                  if (!incomingMessageObserver.closed) {
+                    socket.pong();
+                  }
+                }
               })
             )
           );
 
-          const out$ = {
+          const out$: AsyncObserver<ArrayBufferLike> = {
             get closed() {
               return false;
             },
-            async next(value: Data) {
+            async next(value) {
               await lastMessageSent;
               await (lastMessageSent = new Promise((resolve, reject) =>
-                socket.send(value, err => {
+                socket.send(value, { binary: true }, err => {
                   if (err) {
                     reject(err);
                   } else {
@@ -61,10 +87,7 @@ export function websocketServer(opts: ServerOptions) {
           });
         });
 
-        server.on("error", err => {
-          console.error("Websocket server error:");
-          console.error(err);
-        });
+        server.on("error", connectionsObserver.error);
 
         return () => {
           server.close();
@@ -72,4 +95,8 @@ export function websocketServer(opts: ServerOptions) {
       })
     )
   );
+}
+
+function bufferToArrayBuffer(buf: Buffer): ArrayBufferLike {
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 }
