@@ -34,8 +34,8 @@ export function comms<OUT, IN>(
   const incomingByID: { [id: string]: AsyncObserver<IN> } = {};
   let maxID = 0;
 
-  const incoming = buffer(
-    subject(
+  const incoming = subject(
+    buffer(
       observable<Duplex<OUT, IN>>(observer => {
         const inSub = subscribe(chnls, {
           next(packet) {
@@ -97,9 +97,9 @@ export function comms<OUT, IN>(
 
   function establish(id: number) {
     const in$ = channel<IN>();
-    incomingByID[id] = in$;
-
     const out$ = channel<OUT>();
+
+    incomingByID[id] = in$;
 
     subscribe(out$, {
       next(value) {
@@ -107,17 +107,15 @@ export function comms<OUT, IN>(
         return chnls.next(packet);
       },
       error(error) {
-        const in$ = incomingByID[id];
         delete incomingByID[id];
         if (in$ && !in$.closed) {
           return in$.error(error);
         }
       },
-      complete() {
+      async complete() {
         const packet: [number, true] = [id, true];
-        chnls.next(packet).then;
+        await chnls.next(packet);
 
-        const in$ = incomingByID[id];
         delete incomingByID[id];
         if (in$ && !in$.closed) {
           return in$.complete();
