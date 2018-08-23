@@ -24,9 +24,9 @@ export type Props<E extends object> = {
 let lastID = 0;
 const DEBUG = false;
 
-export function h<TAG extends keyof HTMLElementTagNameMap>(
+export function h<TAG extends keyof ElementTagNameMap>(
   tagName: TAG,
-  props: Props<HTMLElementTagNameMap[TAG]> = {},
+  props: Props<ElementTagNameMap[TAG]> = {},
   ...children: Array<
     AsyncIterable<HTMLElement[] | HTMLElement | null> | HTMLElement
   >
@@ -34,7 +34,6 @@ export function h<TAG extends keyof HTMLElementTagNameMap>(
   return observable<HTMLElement>(observer => {
     const element = document.createElement(tagName);
     const id = (lastID++).toString();
-    element.dataset.id = id;
 
     DEBUG && console.log(id, "creating");
 
