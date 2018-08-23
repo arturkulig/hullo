@@ -25,53 +25,58 @@ export enum Oddity {
 export interface Comms<OUT, IN> {
   incoming: AsyncIterable<Duplex<OUT, IN>>;
   open(): Duplex<OUT, IN>;
+  close(): void;
 }
 
 export function comms<OUT, IN>(
-  chnls: Duplex<CommsPacket<OUT>, CommsPacket<IN>>,
+  connection: Duplex<CommsPacket<OUT>, CommsPacket<IN>>,
   oddity: Oddity
 ): Comms<OUT, IN> {
   const incomingByID: { [id: string]: AsyncObserver<IN> } = {};
   let maxID = 0;
 
+  const connectionSub = subscribe(connection, {
+    next(packet) {
+      if (
+        !(packet instanceof Array) ||
+        (packet as any).length === 0 ||
+        (packet as any).length > 3
+      ) {
+        return;
+      }
+
+      if (typeof packet[0] !== "number") {
+        return;
+      }
+
+      maxID = Math.max(maxID, packet[0]);
+      if (packet.length === 1 && !incomingByID[packet[0]]) {
+        const comm = establish(packet[0]);
+        if (incomingObserver) {
+          return incomingObserver.next(comm);
+        }
+      }
+
+      if (typeof packet[1] !== "boolean") {
+        return;
+      }
+      if (packet.length === 2) {
+        return incomingByID[packet[0]].complete();
+      }
+      if (packet.length === 3) {
+        return incomingByID[packet[0]].next(packet[2]);
+      }
+    }
+  });
+
+  let incomingObserver: AsyncObserver<Duplex<any, any>> | null = null;
   const incoming = subject(
     buffer(
       observable<Duplex<OUT, IN>>(observer => {
-        const inSub = subscribe(chnls, {
-          next(packet) {
-            if (
-              !(packet instanceof Array) ||
-              (packet as any).length === 0 ||
-              (packet as any).length > 3
-            ) {
-              return;
-            }
-
-            if (typeof packet[0] !== "number") {
-              return;
-            }
-
-            maxID = Math.max(maxID, packet[0]);
-            if (packet.length === 1 && !incomingByID[packet[0]]) {
-              return observer.next(establish(packet[0]));
-            }
-
-            if (typeof packet[1] !== "boolean") {
-              return;
-            }
-            if (packet.length === 2) {
-              return incomingByID[packet[0]].complete();
-            }
-            if (packet.length === 3) {
-              return incomingByID[packet[0]].next(packet[2]);
-            }
-          }
-        });
+        incomingObserver = observer;
 
         return () => {
-          if (!inSub.closed) {
-            inSub.unsubscribe();
-          }
+          incomingObserver = null;
         };
       })
     )
@@ -79,8 +84,15 @@ export function comms<OUT, IN>(
 
   return {
     incoming,
+    close,
     open
   };
+
+  function close() {
+    if (!connectionSub.closed) {
+      connectionSub.unsubscribe();
+    }
+  }
 
   function open() {
     const nextID =
@@ -91,7 +103,7 @@ export function comms<OUT, IN>(
         : 1);
     maxID = nextID;
     const comms = establish(nextID);
-    chnls.next([nextID]);
+    connection.next([nextID]);
     return comms;
   }
 
@@ -104,7 +116,7 @@ export function comms<OUT, IN>(
     subscribe(out$, {
       next(value) {
         const packet: [number, false, OUT] = [id, false, value];
-        return chnls.next(packet);
+        return connection.next(packet);
       },
       error(error) {
         delete incomingByID[id];
@@ -114,7 +126,7 @@ export function comms<OUT, IN>(
       },
       async complete() {
         const packet: [number, true] = [id, true];
-        await chnls.next(packet);
+        await connection.next(packet);
 
         delete incomingByID[id];
         if (in$ && !in$.closed) {
