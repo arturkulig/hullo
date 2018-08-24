@@ -2,7 +2,7 @@ import { observable } from "../streams/observable";
 
 export function interval(timeInMs: number) {
   return observable<number>(observer => {
-    let token: NodeJS.Timer | null = null;
+    let token: any = null;
 
     tick();
 
