@@ -91,7 +91,7 @@ export function combineLatest<T>(
 ): AsyncIterable<T[]> {
   return buffer(
     observable<T[]>(observer => {
-      let last = new Array<T>(streams.length);
+      let lastCombined = new Array<T>(streams.length);
 
       let presentAll = false;
       const presentList = streams.map(() => false);
@@ -99,20 +99,21 @@ export function combineLatest<T>(
       const subs = streams.map((stream, idx) =>
         subscribe(stream, {
           next(value: T) {
-            const next = [...last];
-            next[idx] = value;
-            last = next;
+            const nextCombined = [...lastCombined];
+            nextCombined[idx] = value;
+            lastCombined = nextCombined;
             if (!presentAll) {
               presentList[idx] = true;
               presentAll = true;
               for (const present of presentList) {
                 if (!present) {
                   presentAll = false;
+                  break;
                 }
               }
             }
             if (presentAll) {
-              return observer.next(next);
+              return observer.next(nextCombined);
             }
           },
           error: observer.error,

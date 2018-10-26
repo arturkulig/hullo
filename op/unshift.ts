@@ -9,7 +9,7 @@ export function unshift<T>(initialValue: T) {
 
 export function unshift$<T>(initialValue: T) {
   return function unshift$WithInitial(source: AsyncIterable<T>) {
-    return observable(observer => {
+    return observable<T>(observer => {
       let sub: Subscription | null = null;
       observer
         .next(initialValue)

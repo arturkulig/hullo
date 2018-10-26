@@ -1,59 +1,57 @@
 import { atom } from "../streams";
 
-type Handler<
-  STATE,
-  INS extends object,
-  OUTS extends { [id in keyof INS]: any },
-  K extends keyof INS
-> = (
-  input: INS[K],
-  state: STATE
-) => HandlerResult<STATE, OUTS, K> | Promise<HandlerResult<STATE, OUTS, K>>;
-type HandlerResult<STATE, OUTS extends object, K extends keyof OUTS> = {
-  state?: STATE;
-  reply: OUTS[K];
-};
-
-type Action<
-  INS extends object,
-  OUTS extends { [id in keyof INS]: any },
-  K extends keyof INS
-> = (
-  input: INS[K]
-) => OUTS[K] extends Promise<any> ? OUTS[K] : Promise<OUTS[K]>;
+type Action<A extends { input: any; output: any }> = (
+  input: A["input"]
+) => A["output"] extends Promise<any> ? A["output"] : Promise<A["output"]>;
 
 type Call<
-  INS extends object,
-  OUTS extends { [id in keyof INS]: any },
-  K extends keyof INS
+  ACTIONSPROPS extends { [id: string]: { input: any; output: any } },
+  K extends keyof ACTIONSPROPS
 > = {
   action: K;
-  input: INS[K];
-  resolve: (output: OUTS[K]) => void;
+  input: ACTIONSPROPS[K]["input"];
+  resolve: (output: ACTIONSPROPS[K]["output"]) => void;
   reject: (error: any) => void;
 };
 
 type ServerActions<
-  INS extends object,
-  OUTS extends { [id in keyof INS]: any }
-> = { [id in keyof INS]: Action<INS, OUTS, id> };
+  ACTIONSPROPS extends { [id: string]: { input: any; output: any } }
+> = { [id in keyof ACTIONSPROPS]: Action<ACTIONSPROPS[id]> };
 
 export type Server<
   STATE,
-  INS extends object,
-  OUTS extends { [id in keyof INS]: any }
-> = ServerActions<INS, OUTS> & AsyncIterable<STATE> & { valueOf(): STATE };
+  ACTIONSPROPS extends { [id: string]: { input: any; output: any } }
+> = ServerActions<ACTIONSPROPS> & AsyncIterable<STATE> & { valueOf(): STATE };
+
+type HandlerInput<HANDLER> = HANDLER extends (
+  arg: infer A,
+  ...args: any[]
+) => any
+  ? A
+  : never;
+type HandlerReply<HANDLER> = HANDLER extends (
+  ...args: any[]
+) => { reply: infer R }
+  ? R
+  : HANDLER extends (...args: any[]) => Promise<{ reply: infer R }> ? R : never;
+type ActionPropsOfHandlers<ACTIONS> = {
+  [id in keyof ACTIONS]: {
+    input: HandlerInput<(ACTIONS)[id]>;
+    output: HandlerReply<(ACTIONS)[id]>;
+  }
+};
 
 export function server<
   STATE,
-  INS extends object,
-  OUTS extends { [id in keyof INS]: any }
+  HANDLERS extends { [id: string]: (input: any, state: STATE) => any }
 >(
   initialState: STATE,
-  handlers: { [id in keyof INS]: Handler<STATE, INS, OUTS, id> }
-): Server<STATE, INS, OUTS> {
+  handlers: HANDLERS
+): Server<STATE, ActionPropsOfHandlers<HANDLERS>> {
   let actionExecuting = false;
-  const calls: Array<Call<INS, OUTS, keyof INS>> = [];
+  const calls: Array<
+    Call<ActionPropsOfHandlers<HANDLERS>, keyof ActionPropsOfHandlers<HANDLERS>>
+  > = [];
   const state$ = atom<STATE>(initialState);
 
   const iterable = {
@@ -63,10 +61,13 @@ export function server<
     }
   };
 
-  const actions = {} as ServerActions<INS, OUTS>;
-  for (const action of Object.keys(handlers) as Array<keyof INS>) {
-    actions[action] = (input: INS[typeof action]) => {
-      return new Promise<OUTS[typeof action]>((resolve, reject) => {
+  const actions = {} as ServerActions<ActionPropsOfHandlers<HANDLERS>>;
+  for (const action of Object.keys(handlers) as Array<
+    keyof ActionPropsOfHandlers<HANDLERS>
+  >) {
+    type cActions = ActionPropsOfHandlers<HANDLERS>[typeof action];
+    actions[action] = ((input: cActions["input"]) => {
+      return new Promise<cActions["output"]>((resolve, reject) => {
         calls.push({
           action,
           input,
@@ -77,7 +78,7 @@ export function server<
           execActions();
         }
       });
-    };
+    }) as any;
   }
 
   return Object.assign(iterable, actions);

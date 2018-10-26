@@ -1,10 +1,6 @@
-import { h, Props } from "./h";
+import { element, ElementMod } from "./element";
 
 export function ofElement<TAG extends keyof ElementTagNameMap>(tagName: TAG) {
-    return (
-      props: Props<ElementTagNameMap[TAG]> = {},
-      ...children: Array<
-        AsyncIterable<HTMLElement[] | HTMLElement | null> | HTMLElement
-      >
-    ) => h(tagName, props, ...children);
-  }
+  return (...mods: ElementMod<ElementTagNameMap[TAG]>[]) =>
+    element<TAG>(tagName, ...mods);
+}

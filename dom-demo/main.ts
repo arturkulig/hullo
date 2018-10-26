@@ -1,8 +1,9 @@
-import { html, render } from "../dom";
+import { html, render, style, children, events } from "../dom";
 import { interval, atom, pipe } from "../core";
 import { map$ } from "../op/map";
 import { subject } from "../op/subject";
 import { combineLatest } from "../op/combineLatest";
+import { props } from "../dom/props";
 
 const mount = document.createElement("div");
 document.body.appendChild(mount);
@@ -19,33 +20,33 @@ function App() {
   );
 
   return html.div(
-    {
-      style: {
-        position: "absolute",
-        transformOrigin: "0 0",
-        left: "50%",
-        top: "50%",
-        width: "10px",
-        height: "10px",
-        background: "#eee",
-        transform: pipe(
-          phase$,
-          map$((t: number) => {
-            const scale = 1 + (t > 5 ? 10 - t : t) / 10;
-            return `scaleX(${scale / 2.5}) scaleY(0.7) translateZ(0.1px)`;
-          })
-        )
-      }
-    },
-    ...SierpinskiTriangle({
-      x: 0,
-      y: 0,
-      size: 1000,
-      text: pipe(
+    style({
+      position: "absolute",
+      transformOrigin: "0 0",
+      left: "50%",
+      top: "50%",
+      width: "10px",
+      height: "10px",
+      background: "#eee",
+      transform: pipe(
         phase$,
-        map$(timestamp => timestamp.toString())
+        map$((t: number) => {
+          const scale = 1 + (t > 5 ? 10 - t : t) / 10;
+          return `scaleX(${scale / 2.5}) scaleY(0.7) translateZ(0.1px)`;
+        })
       )
-    })
+    }),
+    children(
+      ...SierpinskiTriangle({
+        x: 0,
+        y: 0,
+        size: 1000,
+        text: pipe(
+          phase$,
+          map$(timestamp => timestamp.toString())
+        )
+      })
+    )
   );
 }
 
@@ -87,7 +88,7 @@ function SierpinskiTriangle(props: {
   ];
 }
 
-function Dot(props: {
+function Dot(data: {
   x: number;
   y: number;
   size: number;
@@ -95,34 +96,38 @@ function Dot(props: {
 }) {
   const hover$ = atom(false);
 
-  return html.div({
-    onmouseover: () => {
-      hover$.next(true);
-    },
-    onmouseout: () => {
-      hover$.next(false);
-    },
-    style: {
+  return html.div(
+    events({
+      mouseover: () => {
+        hover$.next(true);
+      },
+      mouseout: () => {
+        hover$.next(false);
+      }
+    }),
+    style({
       position: "absolute",
       font: "normal 15px sans-serif",
       textAlign: "center",
       cursor: "pointer",
-      width: `${props.size}px`,
-      height: `${props.size}px`,
-      left: `${props.x}px`,
-      top: `${props.y}px`,
-      borderRadius: `${props.size / 2}px`,
-      lineHeight: `${props.size}px`,
+      width: `${data.size}px`,
+      height: `${data.size}px`,
+      left: `${data.x}px`,
+      top: `${data.y}px`,
+      borderRadius: `${data.size / 2}px`,
+      lineHeight: `${data.size}px`,
       background: pipe(
         hover$,
         map$(hover => (hover ? "#ff0" : "#61dafb"))
       )
-    },
-    innerText: pipe(
-      combineLatest([hover$, props.text]),
-      map$(([hover = false, text = ""]) => (hover ? `*${text}*` : text))
-    )
-  });
+    }),
+    props({
+      innerText: pipe(
+        combineLatest([hover$, data.text]),
+        map$(([hover = false, text = ""]) => (hover ? `*${text}*` : text))
+      )
+    })
+  );
 }
 
 const { unsubscribe: stop } = render(mount, App());

@@ -6,6 +6,7 @@
   "scripts": {
     "index": "./index-folders.sh",
     "check": "npm run index; tsc --noEmit",
+    "dev": "npm run index; tsc --noEmit -w",
     "build": "npm run index; tsc",
     "prepublish": "npm run build",
     "clean": "find . -iname \"*.js\" ! -path \"*node_modules*\" ! -path \"*.git*\" -delete"

@@ -186,7 +186,7 @@ function createIterator<T>(producer: AsyncProducer<T>): AsyncIterator<T> {
         break;
       case "incoming:value":
       case "incoming:error":
-        messageReject(new MessageInQueue());
+        messageReject(new MessageInQueue(messageType, messageValue));
         return;
       case "closed":
         messageConfirm();
@@ -211,8 +211,9 @@ function createIterator<T>(producer: AsyncProducer<T>): AsyncIterator<T> {
     switch (messageType) {
       case "incoming:value":
         state = INITIAL;
-        if (messageValue == null) {
-          throw new Error();
+        if (messageValue === undefined) {
+          // TODO should that really be an error?
+          throw new Error("undefined is not a message");
         }
         consumerFeed({ done: false, value: messageValue });
         messageConfirm();
@@ -245,7 +246,14 @@ abstract class Exception {
 }
 
 export class MessageInQueue extends Exception {
-  message = "Previous message not received yet";
+  constructor(public messageType: string, public messageValue: any) {
+    super();
+  }
+  get message() {
+    return `Previous message not received yet:\n${
+      this.messageType
+    }\n${JSON.stringify(this.messageValue)}`;
+  }
 }
 
 export class AlreadyAwaiting extends Exception {

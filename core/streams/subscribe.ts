@@ -108,11 +108,15 @@ function muffle<IN>(
   try {
     const result = p(...input);
     if (typeof result === "object" && "then" in result) {
-      return result.then(noop, (e: any) => {
-        console.warn("muffled", e);
-      });
+      return result.then(
+        noop,
+        noop
+        // (e: any) => {
+        //   console.warn("muffled", e);
+        // }
+      );
     }
-  } catch {}
+  } catch (e) {}
 }
 
 function noop(): undefined {

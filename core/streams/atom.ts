@@ -17,6 +17,7 @@ export function atom<T>(initial: T): Atom<T> {
           return observers.reduce((r: boolean, i) => r && i.closed, true);
         },
         next(value: T) {
+          state = value;
           return Promise.all(
             observers.map(observer => observer.next(value))
           ).then(noop);
