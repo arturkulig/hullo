@@ -1,4 +1,4 @@
-find . -type f -mindepth 1 -name index.ts |
+find . -type f -mindepth 2 -maxdepth 2 -name index.ts |
     sed "/node_modules/d" |
     sed "/.git/d" |
     xargs -n1 -I{} dirname {} |
