@@ -1,13 +1,15 @@
-import { pipe } from "../../f/pipe";
-import { interval } from "../../stream/interval";
-import { map } from "../../stream/map";
-import { subject } from "../../stream/subject";
-import * as html from "../../dom/html";
-import { Observable } from "../../stream/observable";
-import { ElementShape } from "../../dom/element";
-import { atom } from "../../stream/atom";
-import { combineLatest } from "../../stream/combineLatest";
-import { mount } from "../../dom/mount";
+import { pipe } from "../../pipe";
+import { Cancellation } from "../../future";
+import {
+  interval,
+  map,
+  subject,
+  Observable,
+  observable,
+  atom,
+  combineLatest
+} from "../../stream";
+import { html, ElementShape, mount } from "../../dom";
 
 const rootElement = document.createElement("div");
 document.body.appendChild(rootElement);
@@ -17,12 +19,6 @@ const targetSize = 25;
 const startTime = Date.now();
 
 function App() {
-  const phase$: Observable<number> = pipe(
-    interval(1000),
-    map(t => Math.round(((t - startTime) / 1000) % 10)),
-    subject
-  );
-
   return html.div({
     style: {
       position: "absolute",
@@ -33,9 +29,21 @@ function App() {
       height: "10px",
       background: "#eee",
       transform: pipe(
-        phase$,
+        observable<void>(observer => {
+          let currentSending: null | Cancellation = null;
+          function send() {
+            currentSending = observer.next()(send);
+          }
+          send();
+          return () => {
+            if (currentSending) {
+              currentSending();
+            }
+          };
+        }),
         map(
-          (t: number): string => {
+          (): string => {
+            const t = ((Date.now() - startTime) / 1000) % 10;
             const scale = 1 + (t > 5 ? 10 - t : t) / 10;
             return `scaleX(${scale / 2.5}) scaleY(0.7) translateZ(0.1px)`;
           }
@@ -47,8 +55,9 @@ function App() {
       y: 0,
       size: 1000,
       text: pipe(
-        phase$,
-        map(timestamp => timestamp.toString())
+        interval(1000),
+        map(t => Math.round(((t - startTime) / 1000) % 10).toString(10)),
+        subject
       )
     })
   });
