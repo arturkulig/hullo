@@ -2,6 +2,8 @@ import { ElementShape } from "./element";
 import { Cancellation, resolve, Task, resolved } from "../future/task";
 import { Observable, Observer } from "../stream/observable";
 import { then } from "../future/then";
+import { future } from "../future/future";
+import { pipe } from "../pipe";
 
 export function render(shape: ElementShape) {
   const e = document.createElement(shape.tagName);
@@ -173,22 +175,51 @@ function applyAttr<NAME extends string>(
 
 function forEach<T>(
   streamOrValue: Observable<T> | T,
-  next: (v: T) => Task | void,
-  complete?: () => Task | void
+  next: (v: T) => void,
+  complete?: () => void
 ) {
   if (typeof streamOrValue === "function") {
     return (streamOrValue as Observable<T>)({
-      next: singleValue => {
-        return next(singleValue) || resolved;
-      },
-      complete: () => {
-        return (complete ? complete() : undefined) || resolved;
-      }
+      next: singleValue =>
+        pipe(
+          whenPainted(),
+          then(() => next(singleValue))
+        ),
+      complete: () =>
+        complete
+          ? pipe(
+              whenPainted(),
+              then(complete)
+            )
+          : resolved
     });
   } else {
     next(streamOrValue);
     return noop;
   }
 }
+
+let whenPaintedF: null | Task = null;
+
+const whenPainted =
+  typeof window === "undefined" || !("requestAnimationFrame" in window)
+    ? () =>
+        whenPaintedF ||
+        (whenPaintedF = future<void>(resolve => {
+          whenPaintedF = null;
+          setTimeout(resolve, 0);
+          return () => {};
+        }))
+    : () =>
+        whenPaintedF ||
+        (whenPaintedF = future<void>(resolve => {
+          const token = window.requestAnimationFrame(() => {
+            whenPaintedF = null;
+            resolve();
+          });
+          return () => {
+            window.cancelAnimationFrame(token);
+          };
+        }));
 
 function noop() {}
