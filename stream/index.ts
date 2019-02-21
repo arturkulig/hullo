@@ -5,6 +5,7 @@ export * from './duplex';
 export * from './buffer';
 export * from './map';
 export * from './switchMap';
+export * from './combineLatest';
 export * from './channel';
 export * from './observable';
 export * from './subject';
