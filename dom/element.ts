@@ -1,8 +1,8 @@
 import { Observable, Observer } from "../stream/observable";
 
-type ElementChildren = ElementShape[] | Observable<ElementShape[]>;
+export type ElementChildren = ElementShape[] | Observable<ElementShape[]>;
 
-interface ElementDesc {
+export interface ElementDesc {
   attrs: { [id: string]: string | Observable<string | undefined> };
   props: { [id: string]: any | Observable<any> };
   style: {
@@ -16,7 +16,8 @@ export interface ElementShape extends ElementDesc {
   tagName: string;
 }
 
-export const element = (tagName: string) => (
+export const element = (
+  tagName: string,
   { attrs, props, style, events, children }: Partial<ElementDesc>,
   children2?: ElementChildren
 ): ElementShape => ({
