@@ -1,5 +1,6 @@
 import { Task, Cancellation } from "../future/task";
 import { resolved } from "../future/task";
+import { schedule } from "../future";
 
 export interface Observer<T> {
   next(value: T): Task<any>;
@@ -24,7 +25,7 @@ export function observable<T>(producer: Observable<T>): Observable<T> {
         return;
       }
       closed = true;
-      cancel();
+      schedule(cancel);
     };
   };
 }

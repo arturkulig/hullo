@@ -1,40 +1,43 @@
 import { duplex, Duplex } from "./duplex";
 import { observable, Observer } from "./observable";
-import { future } from "../future/future";
-import { all } from "../future/all";
-import { Task } from "../future/task";
 import { buffer } from "./buffer";
+import { subject } from "./subject";
+import { resolved } from "../future";
 
 export interface Atom<T = unknown> extends Duplex<T, T> {}
 
 export function atom<T = unknown>(init: T) {
-  const observers = new Array<Observer<T>>();
+  let remoteObserver: null | Observer<T> = null;
   let state = init;
 
-  const fanOut = (f: (observer: Observer<T>) => Task | void) =>
-    future(consume =>
-      all(observers.map(f).filter(<T>(v: T | void): v is T => !!v))(() => {
-        consume();
-      })
-    );
-
-  return duplex<T, T>(
-    {
-      next: value => {
-        state = value;
-        return fanOut(observer => observer.next(value));
+  return Object.assign(
+    duplex<T, T>(
+      {
+        next: function atomNext(value) {
+          state = value;
+          if (remoteObserver) return remoteObserver.next(value);
+          else return resolved;
+        },
+        complete: function atomCompletion() {
+          if (remoteObserver) return remoteObserver.complete();
+          else return resolved;
+        }
       },
-      complete: () => fanOut(observer => observer.complete())
-    },
-    buffer(
-      observable(observer => {
-        observers.push(observer);
-        observer.next(state);
+      subject(
+        buffer(
+          observable(function watchAtomValues(observer) {
+            remoteObserver = observer;
+            observer.next(state);
 
-        return () => {
-          observers.splice(observers.indexOf(observer), 1);
-        };
-      })
-    )
+            return () => {
+              remoteObserver = null;
+            };
+          })
+        )
+      )
+    ),
+    {
+      valueOf: () => state
+    }
   );
 }

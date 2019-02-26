@@ -1,6 +1,7 @@
 export * from './atom';
 export * from './flatMap';
 export * from './scan';
+export * from './filter';
 export * from './duplex';
 export * from './buffer';
 export * from './map';
@@ -10,3 +11,4 @@ export * from './channel';
 export * from './observable';
 export * from './subject';
 export * from './interval';
+export * from './distinct';

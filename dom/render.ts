@@ -4,198 +4,279 @@ import { Observable, Observer } from "../stream/observable";
 import { then } from "../future/then";
 import { future } from "../future/future";
 import { pipe } from "../pipe";
+import { schedule } from "../future";
+
+interface Possesion {
+  abandon: Cancellation;
+  cancel: Cancellation;
+}
 
 export function render(shape: ElementShape) {
   const e = document.createElement(shape.tagName);
-  return { element: e, cancel: mold(e, shape) };
+  return { element: e, ...mold(e, shape) };
 }
 
-export function mold(e: HTMLElement, shape: ElementShape) {
+export function mold(e: HTMLElement, shape: ElementShape): Possesion {
   const { attrs, props, events, style, children } = shape;
-  const subCancels = new Array<Cancellation>();
+  const possesions = new Array<Possesion>();
 
   for (const k in attrs) {
     if (!Object.prototype.hasOwnProperty.call(attrs, k)) {
       continue;
     }
-    subCancels.push(applyAttr(e, k, attrs[k]));
+    possesions.push(render_attr(e, k, attrs[k]));
   }
 
   for (const k in props) {
     if (!Object.prototype.hasOwnProperty.call(props, k)) {
       continue;
     }
-    subCancels.push(applyProp(e, k, props[k]));
+    possesions.push(render_prop(e, k, props[k]));
   }
 
   for (const k in events) {
     if (!Object.prototype.hasOwnProperty.call(events, k)) {
       continue;
     }
-    subCancels.push(applyEvent(e, k, events[k]));
+    possesions.push(render_event(e, k, events[k]));
   }
 
   for (const k in style) {
     if (!Object.prototype.hasOwnProperty.call(style, k)) {
       continue;
     }
-    subCancels.push(applyStyle(e, k as keyof CSSStyleDeclaration, style[k]));
+    possesions.push(render_style(e, k as keyof CSSStyleDeclaration, style[k]));
   }
 
-  subCancels.push(applyChildren(e, children));
+  possesions.push(render_children(e, children));
 
-  return () => {
-    subCancels.splice(0).forEach(f => (f !== noop ? f() : undefined));
+  return {
+    abandon: () => {
+      possesions.splice(0).forEach(possesion => possesion.abandon());
+    },
+    cancel: () => {
+      possesions.splice(0).forEach(possesion => possesion.cancel());
+    }
   };
 }
 
 type In<T, N extends keyof T> = T[N];
 
-function applyChildren(e: HTMLElement, childShapes$: ElementShape["children"]) {
-  const currentElementList = new Array<{
-    shape: ElementShape;
-    element: HTMLElement;
-    cancel: Cancellation;
-  }>();
+function render_children(
+  e: HTMLElement,
+  childShapes$: ElementShape["children"]
+) {
+  const childrenRegistry = new Array<
+    | {
+        shape: ElementShape;
+        element: HTMLElement;
+        abandon: Cancellation;
+        cancel: Cancellation;
+      }
+    | undefined
+  >();
 
   return forEach(
     childShapes$,
-    nextShapesList => {
-      for (
-        let i = 0;
-        i < Math.max(nextShapesList.length, currentElementList.length);
-        i++
-      ) {
-        if (currentElementList[i] && nextShapesList[i]) {
-          if (currentElementList[i].shape === nextShapesList[i]) {
+    function render_applyChildren_onNewList(nextShapesList) {
+      const length = Math.max(nextShapesList.length, childrenRegistry.length);
+
+      for (let i = 0; i < length; i++) {
+        const current = childrenRegistry[i];
+        const nextShape = nextShapesList[i];
+        if (current && nextShape) {
+          if (current.shape === nextShape) {
             continue;
           }
-          currentElementList[i].cancel();
-          const replacement = render(nextShapesList[i]);
-          e.replaceChild(currentElementList[i].element, replacement.element);
-          currentElementList[i] = { shape: nextShapesList[i], ...replacement };
-        } else if (nextShapesList[i]) {
-          const addition = render(nextShapesList[i]);
-          if (currentElementList[i - 1]) {
-            currentElementList[i - 1].element.insertAdjacentElement(
+          current.cancel();
+          if (current.shape.tagName === nextShape.tagName) {
+            childrenRegistry[i] = {
+              shape: nextShape,
+              element: current.element,
+              ...mold(current.element, nextShape)
+            };
+          } else {
+            const replacement = render(nextShape);
+            e.replaceChild(replacement.element, current.element);
+            childrenRegistry[i] = {
+              shape: nextShape,
+              ...replacement
+            };
+          }
+        } else if (nextShape) {
+          const addition = render(nextShape);
+          const currentBefore = childrenRegistry[i - 1];
+          const currentAfter = childrenRegistry[i + 1];
+          if (currentBefore) {
+            currentBefore.element.insertAdjacentElement(
               "afterend",
               addition.element
             );
-          } else if (currentElementList[i + 1]) {
-            currentElementList[i + 1].element.insertAdjacentElement(
+          } else if (currentAfter) {
+            currentAfter.element.insertAdjacentElement(
               "beforebegin",
               addition.element
             );
           } else {
             e.appendChild(addition.element);
           }
-          currentElementList[i] = { shape: nextShapesList[i], ...addition };
-        } else if (currentElementList[i]) {
-          e.removeChild(currentElementList[i].element);
-          currentElementList[i].cancel();
-          currentElementList.splice(i, 1);
+          childrenRegistry[i] = { shape: nextShape, ...addition };
+        } else if (current) {
+          e.removeChild(current.element);
+          childrenRegistry[i] = undefined;
+          current.abandon();
         }
       }
     },
     () => {
-      currentElementList.splice(0).forEach(_ => {
-        e.removeChild(_.element);
-        _.cancel();
+      childrenRegistry.splice(0).forEach(childEntry => {
+        if (childEntry) {
+          e.removeChild(childEntry.element);
+          childEntry.cancel();
+        }
       });
     }
   );
 }
 
-function applyEvent<NAME extends string>(
+function render_event<NAME extends string>(
   e: HTMLElement,
   name: NAME,
   handler: In<ElementShape["events"], NAME>
-) {
+): Possesion {
+  function schedulingHandler(event: Event) {
+    schedule(handler as (event: Event) => any, event);
+  }
+
   if (typeof handler === "function") {
-    e.addEventListener(name, handler as (event: Event) => any);
-    return () => {
-      e.removeEventListener(name, handler as (event: Event) => any);
+    e.addEventListener(name, schedulingHandler);
+    return {
+      abandon: noop,
+      cancel: function cancelEventListenerApplication() {
+        e.removeEventListener(name, schedulingHandler);
+      }
     };
   } else {
     const observer = handler as Observer<Event>;
+    let closed = false;
     let processing = false;
     let onLastSent = resolve();
+
     const listener = <T extends Event>(event: T) => {
-      if (processing) {
+      if (closed || processing) {
         return;
       }
       processing = true;
-      onLastSent = then<void, void>(() => {
-        processing = false;
-      })(observer.next(event) || resolve());
+      onLastSent = pipe(
+        observer.next(event) || resolve(),
+        then<void, void>(() => {
+          processing = false;
+        })
+      );
     };
-
     e.addEventListener(name, listener);
 
-    return () => {
+    const cancel = () => {
+      if (closed) {
+        return;
+      }
+      closed = true;
       e.removeEventListener(name, listener);
       onLastSent(observer.complete);
+    };
+    return {
+      abandon: cancel,
+      cancel
     };
   }
 }
 
-function applyProp<NAME extends string>(
+function render_prop<NAME extends string>(
   e: HTMLElement,
   name: NAME,
   value: In<ElementShape["props"], NAME>
 ) {
-  return forEach(value, v => {
-    (e as any)[name] = v;
-  });
+  const defaultValue = name in e ? (e as any)[name] : undefined;
+
+  return forEach(
+    value,
+    v => {
+      (e as any)[name] = v;
+    },
+    () => {
+      (e as any)[name] = defaultValue;
+    }
+  );
 }
 
-function applyStyle<NAME extends keyof CSSStyleDeclaration>(
+function render_style<NAME extends keyof CSSStyleDeclaration>(
   e: HTMLElement,
   name: NAME,
   value: ElementShape["style"][NAME]
 ) {
-  return forEach(value, v => {
-    e.style[name] = v;
-  });
+  return forEach(
+    value,
+    v => {
+      e.style[name] = v;
+    },
+    () => {
+      e.style[name] = undefined;
+    }
+  );
 }
 
-function applyAttr<NAME extends string>(
+function render_attr<NAME extends string>(
   e: HTMLElement,
   name: NAME,
   value: In<ElementShape["attrs"], NAME>
 ) {
-  return forEach(value, v => {
-    if (v == undefined) {
+  return forEach(
+    value,
+    v => {
+      if (v == undefined) {
+        e.removeAttribute(name);
+      } else {
+        e.setAttribute(name, v);
+      }
+    },
+    () => {
       e.removeAttribute(name);
-    } else {
-      e.setAttribute(name, v);
     }
-  });
+  );
 }
 
 function forEach<T>(
   streamOrValue: Observable<T> | T,
   next: (v: T) => void,
-  complete?: () => void
-) {
+  complete: () => void
+): Possesion {
   if (typeof streamOrValue === "function") {
-    return (streamOrValue as Observable<T>)({
-      next: singleValue =>
-        pipe(
-          whenPainted(),
-          then(() => next(singleValue))
-        ),
-      complete: () =>
-        complete
-          ? pipe(
-              whenPainted(),
-              then(complete)
-            )
-          : resolved
+    const cancel = (streamOrValue as Observable<T>)({
+      next: function processRenderValue(singleValue) {
+        next(singleValue);
+        return whenPainted();
+      },
+      complete: function processRenderCompletion() {
+        if (complete) {
+          complete();
+          return whenPainted();
+        }
+        return resolved;
+      }
     });
+    return {
+      abandon: cancel,
+      cancel: () => {
+        complete();
+        cancel();
+      }
+    };
   } else {
     next(streamOrValue);
-    return noop;
+    return {
+      abandon: noop,
+      cancel: complete
+    };
   }
 }
 

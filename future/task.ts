@@ -29,7 +29,7 @@ export function task<T = void>(producer: Task<T>): Task<T> {
       if (resolution === Resolution.none) {
         resolution = Resolution.cancelled;
         if (cancel) {
-          cancel();
+          schedule(cancel);
         }
       }
     };

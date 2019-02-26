@@ -1,4 +1,5 @@
-import { task, Task } from "./task";
+import { Task } from "./task";
+import { schedule } from "./schedule";
 
 export { solution };
 
@@ -14,7 +15,7 @@ type State<T> =
 function solution<T = void>(producer: Task<T>): Task<T> {
   let state: State<T> = { type: "none" };
 
-  return task<T>(consume => {
+  return consume => {
     if (state.type === "none") {
       const nextState: State<T> = {
         type: "awaiting",
@@ -30,25 +31,27 @@ function solution<T = void>(producer: Task<T>): Task<T> {
           state = { type: "result", result: value };
           while (consumers.length) {
             const aConsumer = consumers.shift()!;
-            aConsumer(value);
+            schedule(aConsumer, value);
           }
         }
       });
     } else if (state.type === "awaiting") {
       state.consumers.push(consume);
     } else if (state.type === "result") {
-      consume(state.result);
+      schedule(consume, state.result);
     }
 
     return () => {
       if (state.type === "awaiting") {
         const { cancel, consumers } = state;
-        consumers.splice(consumers.indexOf(consume), 1);
-        if (consumers.length === 0) {
-          state = { type: "none" };
-          cancel();
+        if (consumers.includes(consume)) {
+          consumers.splice(consumers.indexOf(consume), 1);
+          if (consumers.length === 0) {
+            state = { type: "none" };
+            schedule(cancel);
+          }
         }
       }
     };
-  });
+  };
 }

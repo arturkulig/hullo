@@ -1,77 +1,133 @@
-import { observable, Observable } from "./observable";
-import { Cancellation } from "../future/task";
+import { Observable, Observer } from "./observable";
+import { Cancellation, Task, resolved } from "../future/task";
 import { future } from "../future/future";
-import { schedule } from "../future/schedule";
+import { solution } from "../future/solution";
+import { schedule } from "../future";
 
 enum BuffedType {
   next,
   complete
 }
+type Ack = (...args: any[]) => void;
 type Buffed<T> =
   | {
       type: BuffedType.next;
       value: T;
-      ack: (...args: any[]) => void;
+      ack: null | Ack;
       cancel: null | Cancellation;
     }
   | {
       type: BuffedType.complete;
-      ack: (...args: any[]) => void;
+      ack: null | Ack;
       cancel: null | Cancellation;
     };
 
-export function buffer<T>(origin: Observable<T>): Observable<T> {
-  return observable<T>(observer => {
-    let cancelCurrentDispatch: null | Cancellation = null;
+export function buffer<T>(source: Observable<T>): Observable<T> {
+  return (observer: Observer<T>) => {
     const buff = Array<Buffed<T>>();
+    let currentFrame: null | Buffed<T> = null;
 
-    const run = () => {
-      if (!cancelCurrentDispatch && buff.length) {
-        const oldEntry = buff.shift()!;
-        const oldEntrySending =
-          oldEntry.type === BuffedType.next
-            ? observer.next(oldEntry.value)
+    function buffer_wrapUp() {
+      if (!currentFrame) {
+        return;
+      }
+      const { ack } = currentFrame;
+      currentFrame = null;
+      if (ack) {
+        schedule(ack);
+      }
+      if (buff.length) {
+        schedule(buffer_flush);
+      }
+    }
+
+    const buffer_flush = () => {
+      if (buff.length && !currentFrame) {
+        const frame = buff.shift()!;
+        currentFrame = frame;
+        const frameSending =
+          frame.type === BuffedType.next
+            ? observer.next(frame.value)
             : observer.complete();
-        const cancel = oldEntrySending(() => {
-          if (cancelCurrentDispatch) {
-            const c = cancelCurrentDispatch;
-            cancelCurrentDispatch = null;
-            c();
-          }
-          schedule(run);
-          oldEntry.ack();
-        });
-        cancelCurrentDispatch = cancel;
-        oldEntry.cancel = cancel;
+        if (frameSending === resolved) {
+          buffer_wrapUp();
+        } else {
+          const cancel = frameSending(buffer_wrapUp);
+          frame.cancel = cancel;
+        }
       }
     };
 
-    const push = (
+    function buffer_push(
       msg: { type: BuffedType.next; value: T } | { type: BuffedType.complete }
-    ) => {
-      return future(resolve => {
-        const newEntry: Buffed<T> = { ...msg, ack: resolve, cancel: null };
-        buff.push(newEntry);
+    ): Task {
+      const frame: Buffed<T> =
+        msg.type === BuffedType.next
+          ? {
+              type: msg.type,
+              value: msg.value,
+              ack: null,
+              cancel: null
+            }
+          : {
+              type: msg.type,
+              ack: null,
+              cancel: null
+            };
 
-        schedule(run);
+      if (!currentFrame) {
+        currentFrame = frame;
+        const sending =
+          msg.type === BuffedType.next
+            ? observer.next(msg.value)
+            : observer.complete();
+        const cancelSending = sending(buffer_wrapUp);
+        frame.cancel = cancelSending;
+        return solution(function buffer_push_onDone(consume) {
+          const cancel = sending(consume);
+          return () => {
+            cancel();
+            cancelSending();
+          };
+        });
+      }
+
+      return future(function buffer_push_whileFlushing(resolve) {
+        buff.push(frame);
+        frame.ack = resolve;
+
+        schedule(buffer_flush);
 
         return () => {
-          if (buff.includes(newEntry)) {
-            buff.splice(buff.indexOf(newEntry), 1);
+          if (buff.includes(frame)) {
+            buff.splice(buff.indexOf(frame), 1);
           }
-          if (newEntry.cancel) {
-            newEntry.cancel();
-            schedule(run);
+          if (frame.cancel) {
+            frame.cancel();
           }
+          schedule(buffer_flush);
         };
       });
-    };
+    }
 
-    const unsub = origin({
-      next: value => push({ type: BuffedType.next, value }),
-      complete: () => push({ type: BuffedType.complete })
+    const unsub = source({
+      next: function buffer_source_next(value) {
+        return buffer_push({ type: BuffedType.next, value });
+      },
+      complete: function buffer_source_complete() {
+        return buffer_push({ type: BuffedType.complete });
+      }
     });
 
-    return unsub;
-  });
+    return function buffer_cancel() {
+      unsub();
+      if (currentFrame) {
+        const { cancel } = currentFrame;
+        currentFrame = null;
+        if (cancel) {
+          cancel();
+        }
+      }
+    };
+  };
 }

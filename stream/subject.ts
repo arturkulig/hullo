@@ -1,11 +1,11 @@
-import { observable, Observable, Observer } from "./observable";
+import { Observable, Observer } from "./observable";
 import { Cancellation } from "../future/task";
 import { all } from "../future/all";
 
 export function subject<T>(origin: Observable<T>): Observable<T> {
   const leeches = new Array<Observer<T>>();
   let cancel: null | Cancellation = null;
-  return observable<T>(observer => {
+  return (observer: Observer<T>) => {
     leeches.push(observer);
 
     if (!cancel) {
@@ -24,5 +24,5 @@ export function subject<T>(origin: Observable<T>): Observable<T> {
         c();
       }
     };
-  });
+  };
 }

@@ -1,4 +1,9 @@
 import { task, Task } from "./task";
 
-export const then = <T, U>(f: (v: T) => U) => (aTask: Task<T>): Task<U> =>
-  task<U>(consume => aTask(value => consume(f(value))));
+export function then<T, U>(f: (v: T) => U) {
+  return function thenI(aTask: Task<T>): Task<U> {
+    return task<U>(function thenII(consume) {
+      return aTask(value => consume(f(value)));
+    });
+  };
+}
