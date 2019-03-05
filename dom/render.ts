@@ -1,8 +1,7 @@
 import { ElementShape } from "./element";
-import { Cancellation, resolve, Task, resolved } from "../future/task";
+import { Cancellation, resolve, resolved } from "../future/task";
 import { Observable, Observer } from "../stream/observable";
 import { then } from "../future/then";
-import { future } from "../future/future";
 import { pipe } from "../pipe";
 import { schedule } from "../future";
 
@@ -76,7 +75,7 @@ function render_children(
     | undefined
   >();
 
-  return forEach(
+  return render_each(
     childShapes$,
     function render_applyChildren_onNewList(nextShapesList) {
       const length = Math.max(nextShapesList.length, childrenRegistry.length);
@@ -105,18 +104,10 @@ function render_children(
           }
         } else if (nextShape) {
           const addition = render(nextShape);
-          const currentBefore = childrenRegistry[i - 1];
+          // const currentBefore = childrenRegistry[i - 1];
           const currentAfter = childrenRegistry[i + 1];
-          if (currentBefore) {
-            currentBefore.element.insertAdjacentElement(
-              "afterend",
-              addition.element
-            );
-          } else if (currentAfter) {
-            currentAfter.element.insertAdjacentElement(
-              "beforebegin",
-              addition.element
-            );
+          if (currentAfter) {
+            e.insertBefore(addition.element, currentAfter.element);
           } else {
             e.appendChild(addition.element);
           }
@@ -144,16 +135,16 @@ function render_event<NAME extends string>(
   name: NAME,
   handler: In<ElementShape["events"], NAME>
 ): Possesion {
-  function schedulingHandler(event: Event) {
+  function schedulingEventListener(event: Event) {
     schedule(handler as (event: Event) => any, event);
   }
 
   if (typeof handler === "function") {
-    e.addEventListener(name, schedulingHandler);
+    e.addEventListener(name, schedulingEventListener);
     return {
       abandon: noop,
       cancel: function cancelEventListenerApplication() {
-        e.removeEventListener(name, schedulingHandler);
+        e.removeEventListener(name, schedulingEventListener);
       }
     };
   } else {
@@ -198,7 +189,7 @@ function render_prop<NAME extends string>(
 ) {
   const defaultValue = name in e ? (e as any)[name] : undefined;
 
-  return forEach(
+  return render_each(
     value,
     v => {
       (e as any)[name] = v;
@@ -214,7 +205,7 @@ function render_style<NAME extends keyof CSSStyleDeclaration>(
   name: NAME,
   value: ElementShape["style"][NAME]
 ) {
-  return forEach(
+  return render_each(
     value,
     v => {
       e.style[name] = v;
@@ -230,7 +221,7 @@ function render_attr<NAME extends string>(
   name: NAME,
   value: In<ElementShape["attrs"], NAME>
 ) {
-  return forEach(
+  return render_each(
     value,
     v => {
       if (v == undefined) {
@@ -245,21 +236,23 @@ function render_attr<NAME extends string>(
   );
 }
 
-function forEach<T>(
+function render_each<T>(
   streamOrValue: Observable<T> | T,
-  next: (v: T) => void,
-  complete: () => void
+  process: (v: T) => void,
+  cleanup: () => void
 ): Possesion {
   if (typeof streamOrValue === "function") {
     const cancel = (streamOrValue as Observable<T>)({
       next: function processRenderValue(singleValue) {
-        next(singleValue);
-        return whenPainted();
+        process(singleValue);
+        return resolved;
+        // return whenPainted();
       },
       complete: function processRenderCompletion() {
-        if (complete) {
-          complete();
-          return whenPainted();
+        if (cleanup) {
+          cleanup();
+          return resolved;
+          // return whenPainted();
         }
         return resolved;
       }
@@ -267,40 +260,40 @@ function forEach<T>(
     return {
       abandon: cancel,
       cancel: () => {
-        complete();
+        cleanup();
         cancel();
       }
     };
   } else {
-    next(streamOrValue);
+    process(streamOrValue);
     return {
       abandon: noop,
-      cancel: complete
+      cancel: cleanup
     };
   }
 }
 
-let whenPaintedF: null | Task = null;
+// let whenPaintedF: null | Task = null;
 
-const whenPainted =
-  typeof window === "undefined" || !("requestAnimationFrame" in window)
-    ? () =>
-        whenPaintedF ||
-        (whenPaintedF = future<void>(resolve => {
-          whenPaintedF = null;
-          setTimeout(resolve, 0);
-          return () => {};
-        }))
-    : () =>
-        whenPaintedF ||
-        (whenPaintedF = future<void>(resolve => {
-          const token = window.requestAnimationFrame(() => {
-            whenPaintedF = null;
-            resolve();
-          });
-          return () => {
-            window.cancelAnimationFrame(token);
-          };
-        }));
+// const whenPainted =
+//   typeof window === "undefined" || !("requestAnimationFrame" in window)
+//     ? () =>
+//         whenPaintedF ||
+//         (whenPaintedF = future<void>(resolve => {
+//           whenPaintedF = null;
+//           setTimeout(resolve, 0);
+//           return () => {};
+//         }))
+//     : () =>
+//         whenPaintedF ||
+//         (whenPaintedF = future<void>(resolve => {
+//           const token = window.requestAnimationFrame(() => {
+//             whenPaintedF = null;
+//             resolve();
+//           });
+//           return () => {
+//             window.cancelAnimationFrame(token);
+//           };
+//         }));
 
 function noop() {}

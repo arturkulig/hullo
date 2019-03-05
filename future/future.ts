@@ -3,15 +3,19 @@ import { schedule } from "./schedule";
 
 export { future, futureFromPromise };
 
+type State<T> =
+  | { type: "none" }
+  | {
+      type: "awaiting";
+      cancel?: Cancellation;
+      consumers: Array<(v: T) => void>;
+    }
+  | { type: "result"; result: T };
+
+const NONE: State<any> = { type: "none" };
+
 function future<T = void>(producer: Task<T>): Task<T> {
-  let state:
-    | { type: "none" }
-    | {
-        type: "awaiting";
-        cancel: Cancellation;
-        consumers: Array<(v: T) => void>;
-      }
-    | { type: "result"; result: T } = { type: "none" };
+  let state: State<T> = NONE;
 
   function resolveFuture(value: T) {
     switch (state.type) {
@@ -28,12 +32,12 @@ function future<T = void>(producer: Task<T>): Task<T> {
     }
   }
 
-  state = { type: "awaiting", cancel: () => {}, consumers: [] };
+  state = { type: "awaiting", consumers: [] };
   state.cancel = producer(resolveFuture);
 
   return consume => {
     if (state.type === "none") {
-      state = { type: "awaiting", cancel: () => {}, consumers: [consume] };
+      state = { type: "awaiting", consumers: [consume] };
       state.cancel = producer(resolveFuture);
     } else if (state.type === "awaiting") {
       state.consumers.push(consume);
@@ -43,8 +47,10 @@ function future<T = void>(producer: Task<T>): Task<T> {
     return () => {
       if (state.type === "awaiting") {
         const { cancel } = state;
-        state = { type: "none" };
-        schedule(cancel);
+        state = NONE;
+        if (cancel) {
+          schedule(cancel);
+        }
       }
     };
   };

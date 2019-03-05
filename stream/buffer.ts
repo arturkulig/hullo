@@ -13,13 +13,13 @@ type Buffed<T> =
   | {
       type: BuffedType.next;
       value: T;
-      ack: null | Ack;
-      cancel: null | Cancellation;
+      ack?: Ack;
+      cancel?: Cancellation;
     }
   | {
       type: BuffedType.complete;
-      ack: null | Ack;
-      cancel: null | Cancellation;
+      ack?: Ack;
+      cancel?: Cancellation;
     };
 
 export function buffer<T>(source: Observable<T>): Observable<T> {
@@ -27,59 +27,32 @@ export function buffer<T>(source: Observable<T>): Observable<T> {
     const buff = Array<Buffed<T>>();
     let currentFrame: null | Buffed<T> = null;
 
-    function buffer_wrapUp() {
-      if (!currentFrame) {
-        return;
+    const unsub = source({
+      next: function buffer_source_next(value) {
+        return buffer_push({ type: BuffedType.next, value });
+      },
+      complete: function buffer_source_complete() {
+        return buffer_push({ type: BuffedType.complete });
       }
-      const { ack } = currentFrame;
-      currentFrame = null;
-      if (ack) {
-        schedule(ack);
-      }
-      if (buff.length) {
-        schedule(buffer_flush);
-      }
-    }
+    });
 
-    const buffer_flush = () => {
-      if (buff.length && !currentFrame) {
-        const frame = buff.shift()!;
-        currentFrame = frame;
-        const frameSending =
-          frame.type === BuffedType.next
-            ? observer.next(frame.value)
-            : observer.complete();
-        if (frameSending === resolved) {
-          buffer_wrapUp();
-        } else {
-          const cancel = frameSending(buffer_wrapUp);
-          frame.cancel = cancel;
+    return function buffer_cancel() {
+      unsub();
+      if (currentFrame) {
+        const { cancel } = currentFrame;
+        currentFrame = null;
+        if (cancel) {
+          schedule(cancel);
         }
       }
     };
 
-    function buffer_push(
-      msg: { type: BuffedType.next; value: T } | { type: BuffedType.complete }
-    ): Task {
-      const frame: Buffed<T> =
-        msg.type === BuffedType.next
-          ? {
-              type: msg.type,
-              value: msg.value,
-              ack: null,
-              cancel: null
-            }
-          : {
-              type: msg.type,
-              ack: null,
-              cancel: null
-            };
-
+    function buffer_push(frame: Buffed<T>): Task {
       if (!currentFrame) {
         currentFrame = frame;
         const sending =
-          msg.type === BuffedType.next
-            ? observer.next(msg.value)
+          frame.type === BuffedType.next
+            ? observer.next(frame.value)
             : observer.complete();
         const cancelSending = sending(buffer_wrapUp);
         frame.cancel = cancelSending;
@@ -110,24 +83,35 @@ export function buffer<T>(source: Observable<T>): Observable<T> {
       });
     }
 
-    const unsub = source({
-      next: function buffer_source_next(value) {
-        return buffer_push({ type: BuffedType.next, value });
-      },
-      complete: function buffer_source_complete() {
-        return buffer_push({ type: BuffedType.complete });
-      }
-    });
-
-    return function buffer_cancel() {
-      unsub();
-      if (currentFrame) {
-        const { cancel } = currentFrame;
-        currentFrame = null;
-        if (cancel) {
-          cancel();
+    function buffer_flush() {
+      if (buff.length && !currentFrame) {
+        const frame = buff.shift()!;
+        currentFrame = frame;
+        const frameSending =
+          frame.type === BuffedType.next
+            ? observer.next(frame.value)
+            : observer.complete();
+        if (frameSending === resolved) {
+          buffer_wrapUp();
+        } else {
+          const cancel = frameSending(buffer_wrapUp);
+          frame.cancel = cancel;
         }
       }
-    };
+    }
+
+    function buffer_wrapUp() {
+      if (!currentFrame) {
+        return;
+      }
+      const { ack } = currentFrame;
+      currentFrame = null;
+      if (ack) {
+        schedule(ack);
+      }
+      if (buff.length) {
+        schedule(buffer_flush);
+      }
+    }
   };
 }

@@ -1,4 +1,7 @@
-import { Task, Cancellation, resolve } from "./task";
+import { Task, resolve, Cancellation } from "./task";
+import { pipe } from "../pipe/pipe";
+import { then } from "./then";
+import { schedule } from "./schedule";
 
 export { all };
 
@@ -16,52 +19,58 @@ function all<T extends Array<any>>(tasks: AllIn<T>): AllOut<T> {
     return resolve<T>(([] as any) as T);
   }
   if (tasks.length === 1) {
-    return function all_I1(consume) {
-      return tasks[0](value => consume([value] as T));
-    };
-  }
-  return consume => {
-    let state: State = State.waiting;
-    let leftToResolve: number = tasks.length;
-
-    const allExecutions = tasks.map(
-      (): { result: null | { value: any }; cancel: Cancellation } => ({
-        result: null,
-        cancel: () => {}
-      })
+    return pipe(
+      tasks[0],
+      then<any, T>(wrap1WithArray)
     );
+  }
+  return function all_I2(consume) {
+    let state: State = State.waiting;
+    const oks = tasks.map(() => false);
+    const results = new Array(tasks.length);
+    const cancels = new Array<undefined | Cancellation>(tasks.length);
 
-    function all_tryResolve() {
-      if (state !== State.waiting) {
-        return true;
-      }
-      if (leftToResolve > 0) {
-        return false;
-      }
-      consume(allExecutions.map(function all_formulateFinal(execution) {
-        return execution.result!.value;
-      }) as T);
-      return true;
-    }
-
-    if (!all_tryResolve()) {
-      for (let i = 0; i < tasks.length; i++) {
-        const execution = allExecutions[i];
+    if (tasks.length) {
+      const { length } = tasks;
+      for (let i = 0; i < length; i++) {
         const singleTask = tasks[i];
-        execution.cancel = singleTask(function all_claimExecutionValue(value) {
-          if (!execution.result) {
-            execution.result = { value };
-            leftToResolve--;
-            all_tryResolve();
-          }
-        });
+        cancels.push(
+          singleTask(function all_claimExecutionValue(value) {
+            if (!oks[i]) {
+              if (state !== State.waiting) {
+                return;
+              }
+
+              oks[i] = true;
+              results[i] = value;
+              cancels[i] = undefined;
+
+              for (const aOk of oks) {
+                if (!aOk) {
+                  break;
+                }
+              }
+              state = State.resolved;
+              schedule(consume, results as T);
+            }
+          })
+        );
       }
+    } else {
+      schedule(consume, []);
     }
 
     return function all_cancel() {
-      for (const result of allExecutions) {
-        result.cancel();
+      state = State.cancelled;
+      for (const cancel of cancels) {
+        if (cancel) {
+          schedule(cancel);
+        }
       }
     };
   };
+}
+
+function wrap1WithArray<T>(value: any): any {
+  return [value] as [T];
 }
