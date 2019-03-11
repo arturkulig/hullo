@@ -12,16 +12,18 @@ type State<T> =
     }
   | { type: "result"; result: T };
 
-function solution<T = void>(producer: Task<T>): Task<T> {
-  let state: State<T> = { type: "none" };
+const INIT_STATE: State<any> = { type: "none" };
 
-  return consume => {
+function solution<T = void>(producer: Task<T>): Task<T> {
+  let state: State<T> = INIT_STATE;
+
+  return function solution_task(consume) {
     if (state.type === "none") {
       const nextState: State<T> = {
         type: "awaiting",
         consumers: [consume],
         cancel: () => {
-          state = { type: "none" };
+          state = INIT_STATE;
         }
       };
       state = nextState;
@@ -41,13 +43,13 @@ function solution<T = void>(producer: Task<T>): Task<T> {
       schedule(consume, state.result);
     }
 
-    return () => {
+    return function solution_cancel() {
       if (state.type === "awaiting") {
         const { cancel, consumers } = state;
         if (consumers.includes(consume)) {
           consumers.splice(consumers.indexOf(consume), 1);
           if (consumers.length === 0) {
-            state = { type: "none" };
+            state = INIT_STATE;
             schedule(cancel);
           }
         }

@@ -14,9 +14,10 @@ enum State {
   cancelled
 }
 
+const resolvedWithAnEmptyArray = resolve([]);
 function all<T extends Array<any>>(tasks: AllIn<T>): AllOut<T> {
   if (tasks.length === 0) {
-    return resolve<T>(([] as any) as T);
+    return (resolvedWithAnEmptyArray as any) as AllOut<T>;
   }
   if (tasks.length === 1) {
     return pipe(
@@ -27,8 +28,8 @@ function all<T extends Array<any>>(tasks: AllIn<T>): AllOut<T> {
   return function all_I2(consume) {
     let state: State = State.waiting;
     const oks = tasks.map(() => false);
-    const results = new Array(tasks.length);
-    const cancels = new Array<undefined | Cancellation>(tasks.length);
+    const results = tasks.map(() => null as (null | T[keyof T]));
+    const cancels = tasks.map(() => null as (null | Cancellation));
 
     if (tasks.length) {
       const { length } = tasks;
@@ -43,11 +44,11 @@ function all<T extends Array<any>>(tasks: AllIn<T>): AllOut<T> {
 
               oks[i] = true;
               results[i] = value;
-              cancels[i] = undefined;
+              cancels[i] = null;
 
               for (const aOk of oks) {
                 if (!aOk) {
-                  break;
+                  return;
                 }
               }
               state = State.resolved;
