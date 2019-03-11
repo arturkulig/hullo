@@ -10,7 +10,7 @@
     "dev": "npm run clear; npm run index; concurrently -i -n tsc,jest \"tsc --noEmit -w\" \"jest --watch\"",
     "build": "npm run clear; npm run index; tsc",
     "prepublish": "npm run build",
-    "test": "ts-jest"
+    "test": "npm run clear; npm run index; jest"
   },
   "keywords": [],
   "author": "",
