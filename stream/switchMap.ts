@@ -1,5 +1,5 @@
+import { Cancellation, resolve, resolved } from "../task";
 import { Observable, observable } from "./observable";
-import { Cancellation, resolve, resolved } from "../future/task";
 
 export const switchMap = <I, O>(xf: (i: I) => Observable<O>) => (
   outerStream: Observable<I>

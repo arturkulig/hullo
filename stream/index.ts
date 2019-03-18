@@ -1,7 +1,11 @@
+export * from './state';
+export * from './ofMany';
 export * from './atom';
+export * from './hot';
 export * from './flatMap';
 export * from './scan';
 export * from './filter';
+export * from './parallelize';
 export * from './duplex';
 export * from './buffer';
 export * from './map';
@@ -11,4 +15,5 @@ export * from './channel';
 export * from './observable';
 export * from './subject';
 export * from './interval';
+export * from './ofOne';
 export * from './distinct';

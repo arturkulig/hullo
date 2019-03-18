@@ -1,6 +1,4 @@
-import { Task, Cancellation } from "../future/task";
-import { resolved } from "../future/task";
-import { schedule } from "../future";
+import { Task, Cancellation, resolved, resolve } from "../task";
 
 export interface Observer<T> {
   next(value: T): Task<any>;
@@ -8,24 +6,34 @@ export interface Observer<T> {
 }
 
 export interface Observable<T> {
-  (consumer: Observer<T>): Cancellation;
+  (observer: Observer<T>): Cancellation;
 }
 
 export function observable<T>(producer: Observable<T>): Observable<T> {
-  return consumer => {
-    let closed = false;
+  return function observableI(observer: Observer<T>) {
+    let cancelled = false;
 
     const cancel = producer({
-      next: value => (!closed ? consumer.next(value) : resolved),
-      complete: () => (!closed ? consumer.complete() : resolved)
+      next:
+        observer.next === resolve
+          ? resolve
+          : function observableI_next(value) {
+              return !cancelled ? observer.next(value) : resolved;
+            },
+      complete:
+        observer.complete === resolve
+          ? resolve
+          : function observableI_complete() {
+              return !cancelled ? observer.complete() : resolved;
+            }
     });
 
-    return () => {
-      if (closed) {
+    return function observable_cancel() {
+      if (cancelled) {
         return;
       }
-      closed = true;
-      schedule(cancel);
+      cancelled = true;
+      cancel();
     };
   };
 }

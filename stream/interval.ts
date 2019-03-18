@@ -1,22 +1,19 @@
-import { observable } from "./observable";
+import { Observer } from "./observable";
 import { buffer } from "./buffer";
+import { schedule } from "../task";
 
-export const interval = (span: number) =>
-  buffer(
-    observable<number>(observer => {
-      let cancel = () => {};
+export function interval(span: number, immediate = true) {
+  return buffer(function intervalI(observer: Observer<number>) {
+    const cancelFirst = immediate ? observer.next(Date.now())(noop) : noop;
+    const intervalToken = setInterval(() => {
+      schedule(observer.next, Date.now());
+    }, span);
 
-      cancel = observer.next(Date.now())(() => {
-        const token = setInterval(() => {
-          observer.next(Date.now());
-        }, span);
-        cancel = () => {
-          clearInterval(token);
-        };
-      });
+    return function interval_cancel() {
+      cancelFirst();
+      clearInterval(intervalToken);
+    };
+  });
+}
 
-      return () => {
-        cancel();
-      };
-    })
-  );
+function noop() {}
