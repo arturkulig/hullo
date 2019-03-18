@@ -1,30 +1,34 @@
 import { Observable, Observer } from "../stream/observable";
 
-export type ElementChildren = ElementShape[] | Observable<ElementShape[]>;
+export type HulloElementChildren = HulloElement[] | Observable<HulloElement[]>;
 
-export interface ElementDesc {
+export interface SyncOptions {
+  sync?: undefined | "self" | "branch";
+}
+
+export interface HulloElementDescription extends SyncOptions {
   attrs: { [id: string]: string | Observable<string | undefined> };
   props: { [id: string]: any | Observable<any> };
   style: {
     [id in keyof CSSStyleDeclaration]?: string | Observable<string | undefined>
   };
-  events: { [id: string]: Observer<any> | ((event: Event) => any) };
-  children: ElementChildren;
+  events: { [id: string]: Observer<Event> | ((event: Event) => any) };
+  children: HulloElementChildren;
 }
 
-export interface ElementShape extends ElementDesc {
+export interface HulloElement extends HulloElementDescription {
   tagName: string;
 }
 
 export const element = (
   tagName: string,
-  { attrs, props, style, events, children }: Partial<ElementDesc>,
-  children2?: ElementChildren
-): ElementShape => ({
+  desc: Partial<HulloElementDescription>,
+  children2?: HulloElementChildren
+): HulloElement => ({
   tagName,
-  attrs: attrs || {},
-  props: props || {},
-  style: style || {},
-  events: events || {},
-  children: children2 || children || []
+  attrs: desc.attrs || {},
+  props: desc.props || {},
+  style: desc.style || {},
+  events: desc.events || {},
+  children: children2 || desc.children || []
 });

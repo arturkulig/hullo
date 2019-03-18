@@ -1,8 +1,14 @@
-import { element, ElementDesc, ElementChildren } from "./element";
+import {
+  element,
+  HulloElementDescription,
+  HulloElementChildren
+} from "./element";
 
 function bindToTag(tagName: string) {
-  return (desc: Partial<ElementDesc>, children?: ElementChildren) =>
-    element(tagName, desc, children);
+  return (
+    desc: Partial<HulloElementDescription>,
+    children?: HulloElementChildren
+  ) => element(tagName, desc, children);
 }
 
 export namespace html {

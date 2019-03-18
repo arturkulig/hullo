@@ -1,7 +1,7 @@
-import { ElementShape, ElementDesc, element } from "./element";
+import { HulloElement, HulloElementDescription, element } from "./element";
 import { Observable } from "../stream/observable";
 
-type CustomComponent<PROPS extends object> = (p: PROPS) => ElementShape;
+type CustomComponent<PROPS extends object> = (p: PROPS) => HulloElement;
 type TagNames = keyof ElementTagNameMap;
 
 export function h<PROPS extends object>(
@@ -10,13 +10,13 @@ export function h<PROPS extends object>(
   ...children: PROPS extends { children: any[] }
     ? (PROPS extends { children: infer R } ? R : [])
     : []
-): ElementShape;
+): HulloElement;
 export function h<TAG extends TagNames>(
   tag: TAG,
-  props: ElementDesc,
-  ...children: ElementShape[] | [Observable<ElementShape[]>]
-): ElementShape;
-export function h(...args: any[]): ElementShape {
+  props: HulloElementDescription,
+  ...children: HulloElement[] | [Observable<HulloElement[]>]
+): HulloElement;
+export function h(...args: any[]): HulloElement {
   if (typeof args[0] === "function") {
     const [component, props, ...children] = args;
     return component(
