@@ -34,7 +34,7 @@ describe("then2", () => {
     expect(calledTimes).toBe(1);
   });
 
-  fit("cancels", async () => {
+  it("cancels", async () => {
     let sourceCalledTimes = 0;
     let sourceCancelCalledTimes = 0;
     let postCalledTimes = 0;

@@ -5,13 +5,24 @@ export interface Cancellation {
 }
 
 export interface Task<T = void> {
-  (consume: (value: T) => void): Cancellation;
+  (consume: Consumer<T>): Cancellation;
+}
+
+interface Consumer<T> {
+  (value: T): void;
 }
 
 enum Resolution {
   none,
   done,
   cancelled
+}
+
+interface State<T> {
+  producer: Task<T>;
+  resolution: Resolution;
+  consume: Consumer<T>;
+  cancel: Cancellation;
 }
 
 /**
@@ -49,25 +60,43 @@ enum Resolution {
  */
 export function task<T = void>(producer: Task<T>): Task<T> {
   return function task_task(consume) {
-    let resolution = Resolution.none;
+    const state: State<T> = {
+      producer,
+      consume,
+      resolution: Resolution.none,
+      cancel: noop
+    };
 
-    const cancel = producer(function task_resolve(result) {
-      if (resolution === Resolution.none) {
-        resolution = Resolution.done;
-        schedule(consume, result);
-      }
-    });
+    schedule(task_runProducer, state, producer);
 
     return function task_cancel() {
-      if (resolution === Resolution.none) {
-        resolution = Resolution.cancelled;
-        if (cancel) {
-          schedule(cancel);
+      if (state.resolution === Resolution.none) {
+        state.resolution = Resolution.cancelled;
+        if (state.cancel && state.cancel !== resolve_noopCancel) {
+          state.cancel();
         }
       }
     };
   };
 }
+
+function task_runProducer<T>(state: State<T>) {
+  if (state.resolution === Resolution.none) {
+    state.cancel = state.producer(task_resolve);
+    if ((state as State<T>).resolution === Resolution.cancelled) {
+      schedule(state.cancel);
+    }
+  }
+
+  function task_resolve(result: T) {
+    if (state.resolution === Resolution.none) {
+      state.resolution = Resolution.done;
+      schedule(state.consume, result);
+    }
+  }
+}
+
+function noop() {}
 
 export function resolve(): Task<void>;
 export function resolve<T>(v: T): Task<T>;
@@ -75,21 +104,20 @@ export function resolve<T>(...args: [] | [T]): Task<void> | Task<T> {
   if (args.length === 0) {
     return resolved;
   } else {
-    return resolve_value_producer(args[0]);
+    const v = args[0];
+    return task(function resolve_value_producer(consume: (value: T) => void) {
+      schedule(consume, v);
+      return resolve_noopCancel;
+    });
   }
 }
-function resolve_value_producer<T>(v: T): Task<T> {
-  return function resolve_value_producer(consume: (value: T) => void) {
-    consume(v);
-    return resolve_cancel;
-  };
-}
 
-export function resolved(consume: (value: void) => void) {
+export const resolved = task(resolvedI);
+function resolvedI(consume: (value: void) => void) {
   consume();
-  return resolve_cancel;
+  return resolve_noopCancel;
 }
 
-function resolve_cancel() {
+function resolve_noopCancel() {
   return undefined;
 }
