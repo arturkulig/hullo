@@ -44,12 +44,21 @@ export function buffer<T>(source: Observable<T>): Observable<T> {
         if (acks) {
           acks.splice(0).forEach(scheduleAck);
         }
+        schedule(buffer_flush);
       }
     };
 
     function buffer_send(frame: Buffed<T>): Task {
-      buff.push(frame);
-      schedule(buffer_flush);
+      if (!currentFrame) {
+        currentFrame = frame;
+        buffer_processCurrentFrame();
+        if (frame.sent) {
+          return resolved;
+        }
+      } else {
+        buff.push(frame);
+      }
+      // buffer_flush();
 
       return task(function buffer_send_ack(resolve) {
         if (frame.sent) {
@@ -76,16 +85,24 @@ export function buffer<T>(source: Observable<T>): Observable<T> {
       if (buff.length && !currentFrame) {
         const frame = buff.shift()!;
         currentFrame = frame;
-        const frameSending =
-          frame.type === BuffedType.next
-            ? observer.next(frame.value)
-            : observer.complete();
-        if (frameSending === resolved) {
-          schedule(buffer_wrapUp);
-        } else {
-          const cancel = frameSending(buffer_wrapUp);
-          frame.cancel = cancel;
-        }
+        buffer_processCurrentFrame();
+      }
+    }
+
+    function buffer_processCurrentFrame() {
+      if (!currentFrame) {
+        return;
+      }
+      const frame = currentFrame;
+      const frameSending =
+        frame.type === BuffedType.next
+          ? observer.next(frame.value)
+          : observer.complete();
+      if (frameSending === resolved) {
+        buffer_wrapUp();
+      } else {
+        const cancel = frameSending(buffer_wrapUp);
+        frame.cancel = cancel;
       }
     }
 
@@ -93,17 +110,18 @@ export function buffer<T>(source: Observable<T>): Observable<T> {
       if (!currentFrame) {
         return;
       }
-      const { acks } = currentFrame;
+      const frame = currentFrame;
       currentFrame = null;
-      if (acks) {
+      frame.sent = true;
+      if (frame.acks) {
         if (buff.length) {
-          if (buff[0].acks) {
-            buff[0].acks.push(...acks);
+          if (buff[0].acks && buff[0].acks.length > 0) {
+            buff[0].acks = buff[0].acks.concat(frame.acks);
           } else {
-            buff[0].acks = acks;
+            buff[0].acks = frame.acks;
           }
         } else {
-          acks.splice(0).forEach(scheduleAck);
+          frame.acks.splice(0).forEach(scheduleAck);
         }
       }
       if (buff.length) {

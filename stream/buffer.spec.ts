@@ -6,7 +6,7 @@ import { ofMany } from "./ofMany";
 
 describe("buffer", () => {
   it("bypasses single message at the time", async () => {
-    const source = buffer(ofMany([6, 7, 8]));
+    const source = buffer(ofMany([6, 7, 8, 9, 10]));
 
     const result = new Array<number>();
 
@@ -18,9 +18,9 @@ describe("buffer", () => {
       complete: resolve
     });
 
-    await new Promise(r => setTimeout(r, 10));
+    await new Promise(r => setTimeout(r, 20));
 
-    expect(result).toEqual([6, 7, 8]);
+    expect(result).toEqual([6, 7, 8, 9, 10]);
 
     await new Promise(r => setTimeout(r));
   });

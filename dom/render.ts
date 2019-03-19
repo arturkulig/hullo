@@ -132,7 +132,7 @@ function render_children_each(
     const currentCancel = children.cancels[i];
     // const currentAbandon = children.abandons[i];
     const nextShape = nextShapes[i];
-    // let nextShapePrevPos = -1;
+    let nextShapePrevPos = -1;
 
     // element stays on position
     if (currentShape !== undefined && currentShape === nextShape) {
@@ -140,36 +140,36 @@ function render_children_each(
     }
 
     // element exists and should be moved
-    // else if (
-    //   nextShape !== undefined &&
-    //   (nextShapePrevPos = children.shapes.indexOf(nextShape, i)) >= 0
-    // ) {
-    //   htmlElement.insertBefore(
-    //     children.elements[nextShapePrevPos],
-    //     children.elements[i]
-    //   );
+    else if (
+      nextShape !== undefined &&
+      (nextShapePrevPos = children.shapes.indexOf(nextShape, i)) >= 0
+    ) {
+      htmlElement.insertBefore(
+        children.elements[nextShapePrevPos],
+        children.elements[i]
+      );
 
-    //   children.shapes.splice(
-    //     i,
-    //     0,
-    //     children.shapes.splice(nextShapePrevPos, 1)[0]
-    //   );
-    //   children.elements.splice(
-    //     i,
-    //     0,
-    //     children.elements.splice(nextShapePrevPos, 1)[0]
-    //   );
-    //   children.cancels.splice(
-    //     i,
-    //     0,
-    //     children.cancels.splice(nextShapePrevPos, 1)[0]
-    //   );
-    //   children.abandons.splice(
-    //     i,
-    //     0,
-    //     children.abandons.splice(nextShapePrevPos, 1)[0]
-    //   );
-    // }
+      children.shapes.splice(
+        i,
+        0,
+        children.shapes.splice(nextShapePrevPos, 1)[0]
+      );
+      children.elements.splice(
+        i,
+        0,
+        children.elements.splice(nextShapePrevPos, 1)[0]
+      );
+      children.cancels.splice(
+        i,
+        0,
+        children.cancels.splice(nextShapePrevPos, 1)[0]
+      );
+      children.abandons.splice(
+        i,
+        0,
+        children.abandons.splice(nextShapePrevPos, 1)[0]
+      );
+    }
 
     //element remains
     else if (currentShape !== undefined) {

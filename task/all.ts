@@ -48,7 +48,7 @@ function all<T extends Array<any>>(tasks: AllIn<T>): AllOut<T> {
 
               if (state === State.waiting && oks.indexOf(false) < 0) {
                 state = State.resolved;
-                schedule(consume, []);
+                schedule(consume, results);
               }
             }
           });
@@ -58,7 +58,7 @@ function all<T extends Array<any>>(tasks: AllIn<T>): AllOut<T> {
 
     if (state === State.waiting && oks.indexOf(false) < 0) {
       state = State.resolved;
-      schedule(consume, []);
+      schedule(consume, results);
     }
 
     return function all_cancel() {
