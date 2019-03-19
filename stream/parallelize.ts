@@ -6,13 +6,22 @@ export function parallelize<I, O>(
   xf: (detailInput$: Observable<I>) => O,
   index?: (detailInput: I) => string
 ) {
-  return function parallelize_op(source: Observable<I[]>) {
-    return index
-      ? (outerObserver: Observer<O[]>) =>
-          parallelize_observable_indexed(xf, index, source, outerObserver)
-      : (outerObserver: Observer<O[]>) =>
-          parallelize_observable_collected(xf, source, outerObserver);
-  };
+  return index
+    ? function parallelize_op(source: Observable<I[]>) {
+        return function parallelize_observable(outerObserver: Observer<O[]>) {
+          return parallelize_observable_indexed(
+            xf,
+            index,
+            source,
+            outerObserver
+          );
+        };
+      }
+    : function parallelize_op(source: Observable<I[]>) {
+        return function parallelize_observable(outerObserver: Observer<O[]>) {
+          return parallelize_observable_collected(xf, source, outerObserver);
+        };
+      };
 }
 
 function parallelize_observable_collected<I, O>(
@@ -70,52 +79,45 @@ function parallelize_observable_indexed<I, O>(
   source: Observable<I[]>,
   outerObserver: Observer<O[]>
 ) {
-  const detailInput$Index: { [id: string]: Channel<I> | undefined } = {};
-  const outputIndex: { [id: string]: O | undefined } = {};
+  const detailInput$s: Channel<I>[] = [];
+  const keys: string[] = [];
   const output: O[] = [];
   return source({
     next: function parallelize_source_next(list: I[]): Task<any> {
       const deliveries: Task<any>[] = [];
-      const iterationUnseenKeys = Object.keys(detailInput$Index);
       let needsToPushOutput = false;
 
       for (let i = 0; i < list.length; i++) {
         const key = index(list[i]);
 
-        const pos = iterationUnseenKeys.indexOf(key);
-        if (pos >= 0) {
-          iterationUnseenKeys.splice(pos, 1);
-        }
+        const prevPos = keys.indexOf(key);
 
-        const detailInput$ = detailInput$Index[key];
-        if (detailInput$) {
-          output[i] = outputIndex[key]!;
-          if (detailInput$.valueOf() !== list[i]) {
-            deliveries.push(detailInput$.next(list[i]));
+        if (prevPos >= 0) {
+          if (prevPos !== i) {
+            needsToPushOutput = true;
+            keys.splice(i, 0, keys.splice(prevPos, 1)[0]);
+            output.splice(i, 0, output.splice(prevPos, 1)[0]);
+            detailInput$s.splice(i, 0, detailInput$s.splice(prevPos, 1)[0]);
+          }
+          if (detailInput$s[i].valueOf() !== list[i]) {
+            deliveries.push(detailInput$s[i].next(list[i]));
           }
         } else {
           needsToPushOutput = true;
           const newDetailInput$ = channel();
-          detailInput$Index[key] = newDetailInput$;
           const newOutputEntry = xf(newDetailInput$);
+          keys[i] = index(list[i]);
+          detailInput$s[i] = newDetailInput$;
           output[i] = newOutputEntry;
-          outputIndex[key] = newOutputEntry;
+          deliveries.push(newDetailInput$.next(list[i]));
         }
       }
 
+      keys.splice(list.length);
       output.splice(list.length);
-
-      if (iterationUnseenKeys.length) {
+      for (const closure of detailInput$s.splice(list.length)) {
         needsToPushOutput = true;
-        for (let i = 0; i < iterationUnseenKeys.length; i++) {
-          const key = iterationUnseenKeys[i];
-          const detailInput$ = detailInput$Index[key];
-          if (detailInput$) {
-            deliveries.push(detailInput$.complete());
-          }
-          detailInput$Index[key] = undefined;
-          outputIndex[key] = undefined;
-        }
+        deliveries.push(closure.complete());
       }
 
       if (needsToPushOutput) {
@@ -127,8 +129,7 @@ function parallelize_observable_indexed<I, O>(
     complete: function parallelize_source_complete() {
       output.splice(0);
       return all(
-        Object.keys(detailInput$Index).map(key => {
-          const detailInput$ = detailInput$Index[key];
+        detailInput$s.map(detailInput$ => {
           return detailInput$ ? detailInput$.complete() : resolved;
         })
       );

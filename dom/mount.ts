@@ -6,6 +6,6 @@ export function mount(mount: HTMLElement, app: HulloElement) {
   mount.appendChild(element);
   return () => {
     mount.removeChild(element);
-    cancel();
+    cancel(element);
   };
 }

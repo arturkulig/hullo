@@ -2,11 +2,12 @@ import { Observable, Observer } from "../stream/observable";
 
 export type HulloElementChildren = HulloElement[] | Observable<HulloElement[]>;
 
-export interface SyncOptions {
-  sync?: undefined | "self" | "branch";
-}
+export type SyncMode = "immediate" | "self" | "branch";
 
-export interface HulloElementDescription extends SyncOptions {
+export interface HulloElementDescription {
+  sync?: SyncMode;
+  ref?: (element: HTMLElement) => void;
+  deref?: (element: HTMLElement) => void;
   attrs: { [id: string]: string | Observable<string | undefined> };
   props: { [id: string]: any | Observable<any> };
   style: {
@@ -20,15 +21,20 @@ export interface HulloElement extends HulloElementDescription {
   tagName: string;
 }
 
+const emptyProps: {} = {};
+const emptyChildren: [] = [];
+
 export const element = (
   tagName: string,
   desc: Partial<HulloElementDescription>,
   children2?: HulloElementChildren
 ): HulloElement => ({
   tagName,
-  attrs: desc.attrs || {},
-  props: desc.props || {},
-  style: desc.style || {},
-  events: desc.events || {},
-  children: children2 || desc.children || []
+  attrs: emptyProps,
+  props: emptyProps,
+  style: emptyProps,
+  events: emptyProps,
+  children: emptyChildren,
+  ...desc,
+  ...(children2 ? { children: children2 } : emptyProps)
 });

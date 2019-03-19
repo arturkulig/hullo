@@ -1,36 +1,35 @@
-import { HulloElement, SyncOptions } from "./element";
-import { Cancellation, resolve, resolved, then, schedule, Task } from "../task";
+import { HulloElement, SyncMode } from "./element";
+import { resolve, resolved, then, schedule, Task } from "../task";
 import { Observable, Observer } from "../stream/observable";
 import { pipe } from "../pipe";
 
+interface RenderCancellation {
+  (element: HTMLElement): void;
+}
+
 interface Possesion {
-  abandon: Cancellation;
-  cancel: Cancellation;
+  abandon: RenderCancellation;
+  cancel: RenderCancellation;
 }
 
 export function render(shape: HulloElement) {
   const e = document.createElement(shape.tagName);
-  return { element: e, ...mold(e, shape, {}) };
+  return { element: e, ...mold(e, shape) };
 }
 
-function render_internal(shape: HulloElement, inheritedOptions: SyncOptions) {
+function render_internal(shape: HulloElement, inheritedSync: SyncMode) {
   const e = document.createElement(shape.tagName);
-  return { element: e, ...mold(e, shape, inheritedOptions) };
+  return { element: e, ...mold(e, shape, inheritedSync) };
 }
 
 export function mold(
   htmlElement: HTMLElement,
   elementShape: HulloElement,
-  parentSyncOptions: SyncOptions
+  inheritedSync?: SyncMode
 ): Possesion {
   const { attrs, props, events, style, children } = elementShape;
-  const syncOptions: SyncOptions = {
-    sync: elementShape.sync
-      ? elementShape.sync
-      : parentSyncOptions.sync === "branch"
-      ? "branch"
-      : undefined
-  };
+  const syncOptions: SyncMode =
+    elementShape.sync || inheritedSync || "immediate";
   const possesions = new Array<Possesion>();
 
   for (const k in attrs) {
@@ -70,12 +69,22 @@ export function mold(
 
   possesions.push(render_children(htmlElement, syncOptions, children));
 
+  if (elementShape.ref) {
+    elementShape.ref(htmlElement);
+  }
+  if (elementShape.deref) {
+    possesions.push({
+      abandon: elementShape.deref,
+      cancel: elementShape.deref
+    });
+  }
+
   return {
-    abandon: () => {
-      possesions.splice(0).forEach(possesion => possesion.abandon());
+    abandon: function render_mold_abandon() {
+      possesions.splice(0).forEach(possesion => possesion.abandon(htmlElement));
     },
-    cancel: () => {
-      possesions.splice(0).forEach(possesion => possesion.cancel());
+    cancel: function render_mold_cancel() {
+      possesions.splice(0).forEach(possesion => possesion.cancel(htmlElement));
     }
   };
 }
@@ -83,15 +92,15 @@ export function mold(
 type In<T, N extends keyof T> = T[N];
 
 type ChildrenRegistry = {
-  shapes: (HulloElement)[];
-  elements: (HTMLElement)[];
-  abandons: (Cancellation)[];
-  cancels: (Cancellation)[];
+  shapes: HulloElement[];
+  elements: HTMLElement[];
+  abandons: RenderCancellation[];
+  cancels: RenderCancellation[];
 };
 
 function render_children(
   htmlElement: HTMLElement,
-  syncOptions: SyncOptions,
+  syncOptions: SyncMode,
   childShapes$: HulloElement["children"]
 ) {
   const children: ChildrenRegistry = {
@@ -113,19 +122,17 @@ function render_children(
 
 function render_children_each(
   htmlElement: HTMLElement,
-  syncOptions: SyncOptions,
+  syncOptions: SyncMode,
   nextShapes: Array<HulloElement>,
   children: ChildrenRegistry
 ) {
-  const length = Math.max(nextShapes.length, children.shapes.length);
-
-  for (let i = 0; i < length; i++) {
+  for (let i = 0; i < nextShapes.length; i++) {
     const currentShape = children.shapes[i];
     const currentElement = children.elements[i];
     const currentCancel = children.cancels[i];
-    const currentAbandon = children.abandons[i];
+    // const currentAbandon = children.abandons[i];
     const nextShape = nextShapes[i];
-    let nextShapePrevPos = -1;
+    // let nextShapePrevPos = -1;
 
     // element stays on position
     if (currentShape !== undefined && currentShape === nextShape) {
@@ -133,81 +140,40 @@ function render_children_each(
     }
 
     // element exists and should be moved
-    else if (
-      nextShape !== undefined &&
-      (nextShapePrevPos = children.shapes.indexOf(nextShape, i)) >= 0
-    ) {
-      const nextElement = children.elements[i];
-      const nextCancel = children.cancels[i];
-      const nextAbandon = children.abandons[i];
-      // would be otherwise removed
-      if (nextShapes[nextShapePrevPos] === undefined) {
-        if (currentCancel) {
-          currentCancel();
-        }
+    // else if (
+    //   nextShape !== undefined &&
+    //   (nextShapePrevPos = children.shapes.indexOf(nextShape, i)) >= 0
+    // ) {
+    //   htmlElement.insertBefore(
+    //     children.elements[nextShapePrevPos],
+    //     children.elements[i]
+    //   );
 
-        htmlElement.removeChild(children.elements[nextShapePrevPos]);
-        htmlElement.replaceChild(
-          children.elements[nextShapePrevPos],
-          children.elements[i]!
-        );
-
-        children.shapes[i] = children.shapes[nextShapePrevPos];
-        children.elements[i] = children.elements[nextShapePrevPos];
-        children.cancels[i] = children.cancels[nextShapePrevPos];
-        children.abandons[i] = children.abandons[nextShapePrevPos];
-
-        children.shapes.splice(nextShapePrevPos, 1);
-        children.elements.splice(nextShapePrevPos, 1);
-        children.cancels.splice(nextShapePrevPos, 1);
-        children.abandons.splice(nextShapePrevPos, 1);
-      }
-      // would be otherwise replaced
-      else {
-        let currentElementNextNeighbour =
-          nextShapePrevPos < children.elements.length
-            ? children.elements[nextShapePrevPos + 1]
-            : undefined;
-        let nextElementNextNeighbour =
-          i < children.elements.length
-            ? children.elements[nextShapePrevPos + 1]
-            : undefined;
-
-        htmlElement.removeChild(currentElement);
-        if (currentElementNextNeighbour) {
-          htmlElement.insertBefore(currentElement, currentElementNextNeighbour);
-        } else {
-          htmlElement.appendChild(currentElement);
-        }
-
-        htmlElement.removeChild(nextElement);
-        if (nextElementNextNeighbour) {
-          htmlElement.insertBefore(nextElement, nextElementNextNeighbour);
-        } else {
-          htmlElement.appendChild(nextElement);
-        }
-
-        children.shapes[i] = nextShape;
-        children.elements[i] = nextElement;
-        children.cancels[i] = nextCancel;
-        children.abandons[i] = nextAbandon;
-
-        children.shapes[nextShapePrevPos] = currentShape;
-        children.elements[nextShapePrevPos] = currentElement;
-        children.cancels[nextShapePrevPos] = currentCancel;
-        children.abandons[nextShapePrevPos] = currentAbandon;
-      }
-    }
+    //   children.shapes.splice(
+    //     i,
+    //     0,
+    //     children.shapes.splice(nextShapePrevPos, 1)[0]
+    //   );
+    //   children.elements.splice(
+    //     i,
+    //     0,
+    //     children.elements.splice(nextShapePrevPos, 1)[0]
+    //   );
+    //   children.cancels.splice(
+    //     i,
+    //     0,
+    //     children.cancels.splice(nextShapePrevPos, 1)[0]
+    //   );
+    //   children.abandons.splice(
+    //     i,
+    //     0,
+    //     children.abandons.splice(nextShapePrevPos, 1)[0]
+    //   );
+    // }
 
     //element remains
-    else if (
-      currentShape !== undefined &&
-      currentElement !== undefined &&
-      nextShape
-    ) {
-      if (currentCancel) {
-        currentCancel();
-      }
+    else if (currentShape !== undefined) {
+      currentCancel(currentElement);
 
       // element recycling
       if (currentShape.tagName === nextShape.tagName) {
@@ -231,11 +197,12 @@ function render_children_each(
         children.elements[i] = element;
         children.abandons[i] = abandon;
         children.cancels[i] = cancel;
+        i--;
       }
     }
 
     // element adding
-    else if (nextShape) {
+    else {
       const { element, abandon, cancel } = render_internal(
         nextShape,
         syncOptions
@@ -259,29 +226,28 @@ function render_children_each(
       children.abandons[i] = abandon;
       children.cancels[i] = cancel;
     }
-
-    // element removing
-    else if (currentShape !== undefined && currentElement !== undefined) {
-      htmlElement.removeChild(currentElement);
-      children.shapes.splice(i, 1);
-      children.elements.splice(i, 1);
-      children.abandons.splice(i, 1);
-      children.cancels.splice(i, 1);
-
-      if (currentAbandon) {
-        currentAbandon();
-      }
-    }
   }
+
+  // elements removal
+  for (let i = nextShapes.length; i < children.shapes.length; i++) {
+    children.abandons[i](children.elements[i]);
+    htmlElement.removeChild(children.elements[i]);
+  }
+  children.shapes.splice(nextShapes.length);
+  children.cancels.splice(nextShapes.length);
+  children.abandons.splice(nextShapes.length);
+  children.elements.splice(nextShapes.length);
 }
 
 function render_children_cleanup(
-  _htmlElement: HTMLElement,
-  _syncOptions: SyncOptions,
+  htmlElement: HTMLElement,
+  _syncOptions: SyncMode,
   children: ChildrenRegistry
 ) {
-  children.elements.splice(0).forEach(render_children_cleanup_removeChild);
-  children.cancels.splice(0).forEach(call);
+  children.elements.forEach(render_children_cleanup_removeChild);
+  children.abandons.forEach(function render_children_cleanup_each(abandon) {
+    abandon(htmlElement);
+  });
 }
 
 function render_children_cleanup_removeChild(child: HTMLElement) {
@@ -289,71 +255,92 @@ function render_children_cleanup_removeChild(child: HTMLElement) {
 }
 
 function render_event<NAME extends string>(
-  e: HTMLElement,
+  htmlElement: HTMLElement,
   name: NAME,
   handler: In<HulloElement["events"], NAME>
 ): Possesion {
+  if (typeof handler === "function") {
+    return render_event_regular<NAME>(htmlElement, name, handler);
+  } else {
+    return render_event_observer<NAME>(htmlElement, name, handler);
+  }
+}
+
+function render_event_regular<NAME extends string>(
+  htmlElement: HTMLElement,
+  name: NAME,
+  handler: In<HulloElement["events"], NAME>
+) {
+  htmlElement.addEventListener(name, schedulingEventListener);
+
+  return {
+    abandon: noop,
+    cancel: function cancelEventListenerApplication() {
+      htmlElement.removeEventListener(name, schedulingEventListener);
+    }
+  };
+
   function schedulingEventListener(event: Event) {
     schedule(handler as (event: Event) => any, event);
   }
+}
 
-  if (typeof handler === "function") {
-    e.addEventListener(name, schedulingEventListener);
-    return {
-      abandon: noop,
-      cancel: function cancelEventListenerApplication() {
-        e.removeEventListener(name, schedulingEventListener);
-      }
-    };
-  } else {
-    const observer = handler as Observer<Event>;
-    let closed = false;
-    let processing = false;
-    let onLastSent = resolve();
+function render_event_observer<NAME extends string>(
+  htmlElement: HTMLElement,
+  name: NAME,
+  handler: In<HulloElement["events"], NAME>
+) {
+  const observer = handler as Observer<Event>;
+  let closed = false;
+  let processing = false;
+  let onLastSent = resolve();
 
-    const listener = <T extends Event>(event: T) => {
-      if (closed || processing) {
-        return;
-      }
-      processing = true;
-      onLastSent = pipe(
-        observer.next(event) || resolve(),
-        then<void, void>(() => {
-          processing = false;
-        })
-      );
-    };
-    e.addEventListener(name, listener);
+  htmlElement.addEventListener(name, render_event_observer_listener);
 
-    const cancel = () => {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      e.removeEventListener(name, listener);
-      onLastSent(observer.complete);
-    };
-    return {
-      abandon: cancel,
-      cancel
-    };
+  return {
+    abandon: render_event_observer_cancel,
+    cancel: render_event_observer_cancel
+  };
+
+  function render_event_observer_cancel() {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    htmlElement.removeEventListener(name, render_event_observer_listener);
+    onLastSent(observer.complete);
+  }
+
+  function render_event_observer_listener<T extends Event>(event: T) {
+    if (closed || processing) {
+      return;
+    }
+    processing = true;
+    onLastSent = pipe(
+      observer.next(event) || resolve(),
+      then<void, void>(() => {
+        processing = false;
+      })
+    );
   }
 }
 
 function render_prop<NAME extends string>(
   htmlElement: HTMLElement,
-  syncOptions: SyncOptions,
+  syncOptions: SyncMode,
   name: NAME,
   value: In<HulloElement["props"], NAME>
 ) {
-  const defaultValue =
-    name in htmlElement ? (htmlElement as any)[name] : undefined;
+  const state = {
+    name,
+    ...(name in htmlElement ? { defaultValue: (htmlElement as any)[name] } : {})
+  };
 
   return render_each(
     htmlElement,
     syncOptions,
     value,
-    defaultValue,
+    state,
     render_prop_each,
     render_prop_cleanup
   );
@@ -361,34 +348,34 @@ function render_prop<NAME extends string>(
 
 function render_prop_each(
   htmlElement: HTMLElement,
-  _syncOptions: SyncOptions,
+  _syncOptions: SyncMode,
   value: any,
-  _defaultValue: any
+  state: { name: string; defaultValue?: any }
 ) {
-  (htmlElement as any)[name] = value;
+  (htmlElement as any)[state.name] = value;
 }
 
 function render_prop_cleanup(
   htmlElement: HTMLElement,
-  _syncOptions: SyncOptions,
-  defaultValue: any
+  _syncOptions: SyncMode,
+  state: { name: string; defaultValue?: any }
 ) {
-  (htmlElement as any)[name] = defaultValue;
+  (htmlElement as any)[state.name] = state.defaultValue;
 }
 
 function render_style<NAME extends keyof CSSStyleDeclaration>(
   htmlElement: HTMLElement,
-  syncOptions: SyncOptions,
+  syncOptions: SyncMode,
   name: NAME,
   value: HulloElement["style"][NAME]
 ) {
-  const defaultValue = htmlElement.style[name];
+  const state = { name, defaultValue: htmlElement.style[name] };
 
   return render_each(
     htmlElement,
     syncOptions,
     value,
-    defaultValue,
+    state,
     render_style_each,
     render_style_cleanup
   );
@@ -396,24 +383,24 @@ function render_style<NAME extends keyof CSSStyleDeclaration>(
 
 function render_style_each(
   htmlElement: HTMLElement,
-  _syncOptions: SyncOptions,
+  _syncOptions: SyncMode,
   value: any,
-  _defaultValue: any
+  state: { name: keyof CSSStyleDeclaration; defaultValue: any }
 ) {
-  htmlElement.style[name] = value;
+  htmlElement.style[state.name as any] = value;
 }
 
 function render_style_cleanup(
   htmlElement: HTMLElement,
-  _syncOptions: SyncOptions,
-  defaultValue: any
+  _syncOptions: SyncMode,
+  state: { name: keyof CSSStyleDeclaration; defaultValue: any }
 ) {
-  htmlElement.style[name] = defaultValue;
+  htmlElement.style[state.name as any] = state.defaultValue;
 }
 
 function render_attr<NAME extends string>(
   htmlElement: HTMLElement,
-  syncOptions: SyncOptions,
+  syncOptions: SyncMode,
   name: NAME,
   value: In<HulloElement["attrs"], NAME>
 ) {
@@ -423,7 +410,7 @@ function render_attr<NAME extends string>(
     htmlElement,
     syncOptions,
     value,
-    defaultValue,
+    { name, defaultValue },
     render_attr_each,
     render_attr_cleanup
   );
@@ -431,49 +418,49 @@ function render_attr<NAME extends string>(
 
 function render_attr_each(
   htmlElement: HTMLElement,
-  _syncOptions: SyncOptions,
+  _syncOptions: SyncMode,
   value: any,
-  _defaultValue: string | null
+  state: { name: string; defaultValue: string | null }
 ) {
   if (value == null) {
-    htmlElement.removeAttribute(name);
+    htmlElement.removeAttribute(state.name);
   } else {
-    htmlElement.setAttribute(name, value);
+    htmlElement.setAttribute(state.name, value);
   }
 }
 
 function render_attr_cleanup(
   htmlElement: HTMLElement,
-  _syncOptions: SyncOptions,
-  defaultValue: string | null
+  _syncOptions: SyncMode,
+  state: { name: string; defaultValue: string | null }
 ) {
-  if (defaultValue == null) {
-    htmlElement.removeAttribute(name);
+  if (state.defaultValue == null) {
+    htmlElement.removeAttribute(state.name);
   } else {
-    htmlElement.setAttribute(name, defaultValue);
+    htmlElement.setAttribute(state.name, state.defaultValue);
   }
 }
 
 function render_each<T, S = {}>(
   htmlElement: HTMLElement,
-  syncOptions: SyncOptions,
+  syncMode: SyncMode,
   streamOrValue: Observable<T> | T,
   state: S,
-  process: (h: HTMLElement, o: SyncOptions, v: T, s: S) => void,
-  cleanup: (h: HTMLElement, o: SyncOptions, s: S) => void
+  process: (h: HTMLElement, o: SyncMode, v: T, s: S) => void,
+  cleanup: (h: HTMLElement, o: SyncMode, s: S) => void
 ): Possesion {
   if (typeof streamOrValue === "function") {
     const cancel = (streamOrValue as Observable<T>)({
       next: function render_each_value(singleValue) {
-        process(htmlElement, syncOptions, singleValue, state);
-        if (syncOptions.sync) {
-          return whenPainted();
+        process(htmlElement, syncMode, singleValue, state);
+        if (syncMode === "immediate") {
+          return resolved;
         }
-        return resolved;
+        return whenPainted();
       },
       complete: cleanup
         ? function render_each_cleanup() {
-            cleanup(htmlElement, syncOptions, state);
+            cleanup(htmlElement, syncMode, state);
             return resolved;
           }
         : resolve
@@ -481,15 +468,15 @@ function render_each<T, S = {}>(
     return {
       abandon: cancel,
       cancel: () => {
-        cleanup(htmlElement, syncOptions, state);
+        cleanup(htmlElement, syncMode, state);
         cancel();
       }
     };
   } else {
-    process(htmlElement, syncOptions, streamOrValue, state);
+    process(htmlElement, syncMode, streamOrValue, state);
     return {
       abandon: noop,
-      cancel: () => cleanup(htmlElement, syncOptions, state)
+      cancel: () => cleanup(htmlElement, syncMode, state)
     };
   }
 }

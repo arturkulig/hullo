@@ -1,4 +1,4 @@
-import { Task, resolve, Cancellation } from "./task";
+import { Task, resolve, Cancellation, resolved } from "./task";
 import { pipe } from "../pipe/pipe";
 import { then } from "./then";
 import { schedule } from "./schedule";
@@ -35,29 +35,29 @@ function all<T extends Array<any>>(tasks: AllIn<T>): AllOut<T> {
       const { length } = tasks;
       for (let i = 0; i < length; i++) {
         const singleTask = tasks[i];
-        cancels.push(
-          singleTask(function all_claimExecutionValue(value) {
+        if (singleTask === resolved) {
+          oks[i] = true;
+          results[i] = undefined as any;
+          cancels[i] = null;
+        } else {
+          cancels[i] = singleTask(function all_claimExecutionValue(value) {
             if (!oks[i]) {
-              if (state !== State.waiting) {
-                return;
-              }
-
               oks[i] = true;
               results[i] = value;
               cancels[i] = null;
 
-              for (const aOk of oks) {
-                if (!aOk) {
-                  return;
-                }
+              if (state === State.waiting && oks.indexOf(false) < 0) {
+                state = State.resolved;
+                schedule(consume, []);
               }
-              state = State.resolved;
-              schedule(consume, results as T);
             }
-          })
-        );
+          });
+        }
       }
-    } else {
+    }
+
+    if (state === State.waiting && oks.indexOf(false) < 0) {
+      state = State.resolved;
       schedule(consume, []);
     }
 
