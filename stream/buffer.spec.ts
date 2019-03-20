@@ -18,7 +18,7 @@ describe("buffer", () => {
       complete: resolve
     });
 
-    await new Promise(r => setTimeout(r, 20));
+    await new Promise(r => setTimeout(r, 100));
 
     expect(result).toEqual([6, 7, 8, 9, 10]);
 
