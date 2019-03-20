@@ -126,117 +126,177 @@ function render_children_each(
   nextShapes: Array<HulloElement>,
   children: ChildrenRegistry
 ) {
-  for (let i = 0; i < nextShapes.length; i++) {
-    const currentShape = children.shapes[i];
-    const currentElement = children.elements[i];
-    const currentCancel = children.cancels[i];
-    // const currentAbandon = children.abandons[i];
+  const { shapes, elements, cancels, abandons } = children;
+
+  const nextElements: typeof elements = [];
+  const nextCancels: typeof cancels = [];
+  const nextAbandons: typeof abandons = [];
+
+  for (let i = 0; i < Math.max(shapes.length, nextShapes.length); i++) {
+    const currentShape = shapes[i];
+    const currentElement = elements[i];
+    const currentCancel = cancels[i];
+    const currentAbandon = abandons[i];
     const nextShape = nextShapes[i];
     let nextShapePrevPos = -1;
 
     // element stays on position
-    if (currentShape !== undefined && currentShape === nextShape) {
-      continue;
+    if (
+      i < shapes.length &&
+      i < nextShapes.length &&
+      currentShape === nextShape
+    ) {
+      nextElements.push(elements[i]);
+      nextCancels.push(cancels[i]);
+      nextAbandons.push(abandons[i]);
     }
 
     // element exists and should be moved
     else if (
-      nextShape !== undefined &&
-      (nextShapePrevPos = children.shapes.indexOf(nextShape, i)) >= 0
+      i < nextShapes.length &&
+      (nextShapePrevPos = shapes.indexOf(nextShape)) >= 0 &&
+      nextShapes.indexOf(nextShape) === i
     ) {
-      htmlElement.insertBefore(
-        children.elements[nextShapePrevPos],
-        children.elements[i]
-      );
-
-      children.shapes.splice(
-        i,
-        0,
-        children.shapes.splice(nextShapePrevPos, 1)[0]
-      );
-      children.elements.splice(
-        i,
-        0,
-        children.elements.splice(nextShapePrevPos, 1)[0]
-      );
-      children.cancels.splice(
-        i,
-        0,
-        children.cancels.splice(nextShapePrevPos, 1)[0]
-      );
-      children.abandons.splice(
-        i,
-        0,
-        children.abandons.splice(nextShapePrevPos, 1)[0]
-      );
+      nextElements.push(elements[nextShapePrevPos]);
+      nextCancels.push(cancels[nextShapePrevPos]);
+      nextAbandons.push(abandons[nextShapePrevPos]);
     }
 
     //element remains
-    else if (currentShape !== undefined) {
+    else if (i < shapes.length && i < nextShapes.length) {
       currentCancel(currentElement);
 
-      // element recycling
-      if (currentShape.tagName === nextShape.tagName) {
-        const { abandon, cancel } = mold(
-          currentElement,
-          nextShape,
-          syncOptions
-        );
-        children.shapes[i] = nextShape;
-        children.abandons[i] = abandon;
-        children.cancels[i] = cancel;
-      }
-      // element replacement
-      else {
-        const { element, abandon, cancel } = render_internal(
-          nextShape,
-          syncOptions
-        );
-        htmlElement.replaceChild(element, currentElement);
-        children.shapes[i] = nextShape;
-        children.elements[i] = element;
-        children.abandons[i] = abandon;
-        children.cancels[i] = cancel;
-        i--;
-      }
+      const { element, abandon, cancel } =
+        currentShape.tagName === nextShape.tagName
+          ? {
+              element: currentElement,
+              ...mold(currentElement, nextShape, syncOptions)
+            }
+          : render_internal(nextShape, syncOptions);
+
+      nextElements.push(element);
+      nextAbandons.push(abandon);
+      nextCancels.push(cancel);
     }
 
     // element adding
-    else {
+    else if (i < nextShapes.length) {
       const { element, abandon, cancel } = render_internal(
         nextShape,
         syncOptions
       );
+      nextElements.push(element);
+      nextAbandons.push(abandon);
+      nextCancels.push(cancel);
+    }
 
-      let latterElement: HTMLElement | undefined = undefined;
-      for (let j = i + 1; j < children.elements.length; j++) {
-        if (children.elements[j] !== undefined) {
-          latterElement = children.elements[j];
-          break;
-        }
-      }
-
-      if (latterElement) {
-        htmlElement.insertBefore(element, latterElement);
-      } else {
-        htmlElement.appendChild(element);
-      }
-      children.shapes[i] = nextShape;
-      children.elements[i] = element;
-      children.abandons[i] = abandon;
-      children.cancels[i] = cancel;
+    //
+    else if (i < shapes.length) {
+      currentAbandon(currentElement);
     }
   }
 
-  // elements removal
-  for (let i = nextShapes.length; i < children.shapes.length; i++) {
-    children.abandons[i](children.elements[i]);
-    htmlElement.removeChild(children.elements[i]);
+  // diff
+  let leftI = 0;
+  const leftLength = elements.length;
+  let rightI = 0;
+  const rightLength = nextElements.length;
+  while (leftI < leftLength && rightI < rightLength) {
+    const current = elements[leftI];
+    const next = nextElements[rightI];
+
+    if (current === next) {
+      leftI++;
+      rightI++;
+      continue;
+    }
+
+    const currentInNext = nextElements.indexOf(current, rightI);
+    if (currentInNext < 0) {
+      htmlElement.removeChild(current);
+      leftI++;
+      continue;
+    }
+
+    const nextInCurrent = elements.indexOf(next, leftI);
+    if (nextInCurrent < 0) {
+      if (leftI < leftLength) {
+        htmlElement.insertBefore(next, elements[leftI]);
+      } else {
+        htmlElement.appendChild(next);
+      }
+      rightI++;
+      continue;
+    }
+
+    let leftStableLength = 0;
+    for (
+      let distance = 0,
+        max = Math.min(rightLength - currentInNext, leftLength - leftI);
+      distance < max;
+      distance++
+    ) {
+      if (
+        elements[leftI + distance] === nextElements[currentInNext + distance]
+      ) {
+        leftStableLength++;
+      } else {
+        break;
+      }
+    }
+    let leftStaysBenefit = rightI - currentInNext + leftStableLength;
+
+    let rightStableLength = 0;
+    for (
+      let distance = 0,
+        max = Math.min(leftLength - currentInNext, rightLength - rightI);
+      distance < max;
+      distance++
+    ) {
+      if (
+        elements[rightI + distance] === nextElements[currentInNext + distance]
+      ) {
+        rightStableLength++;
+      } else {
+        break;
+      }
+    }
+    let rightStaysBenefit = leftI - currentInNext + rightStableLength;
+
+    if (leftStaysBenefit < 0 && rightStableLength < 0) {
+      htmlElement.removeChild(current);
+      leftI++;
+    } else if (leftStaysBenefit > rightStaysBenefit) {
+      for (let i = rightI; i < currentInNext; i++) {
+        htmlElement.insertBefore(nextElements[i], current);
+      }
+      rightI += currentInNext - rightI;
+
+      leftI += leftStableLength;
+      rightI += leftStableLength;
+    } else {
+      for (let i = leftI; i < nextInCurrent; i++) {
+        htmlElement.removeChild(elements[i]);
+      }
+      leftI += nextInCurrent - leftI;
+
+      leftI += rightStableLength;
+      rightI += rightStableLength;
+    }
   }
-  children.shapes.splice(nextShapes.length);
-  children.cancels.splice(nextShapes.length);
-  children.abandons.splice(nextShapes.length);
-  children.elements.splice(nextShapes.length);
+
+  for (let i = leftI; i < leftLength; i++) {
+    htmlElement.removeChild(elements[i]);
+  }
+
+  for (let i = rightI; i < rightLength; i++) {
+    htmlElement.appendChild(nextElements[i]);
+  }
+
+  children.shapes = nextShapes;
+  children.elements = nextElements;
+  children.cancels = nextCancels;
+  children.abandons = nextAbandons;
 }
 
 function render_children_cleanup(
@@ -244,14 +304,12 @@ function render_children_cleanup(
   _syncOptions: SyncMode,
   children: ChildrenRegistry
 ) {
-  children.elements.forEach(render_children_cleanup_removeChild);
-  children.abandons.forEach(function render_children_cleanup_each(abandon) {
-    abandon(htmlElement);
-  });
-}
-
-function render_children_cleanup_removeChild(child: HTMLElement) {
-  child.parentElement!.removeChild(child);
+  while (htmlElement.firstChild) {
+    htmlElement.removeChild(htmlElement.firstChild);
+  }
+  for (let i = 0, l = children.abandons.length; i < l; i++) {
+    children.abandons[i](children.elements[i]);
+  }
 }
 
 function render_event<NAME extends string>(

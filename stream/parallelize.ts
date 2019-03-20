@@ -43,21 +43,26 @@ function parallelize_observable_collected<I, O>(
       }
 
       if (list.length > output.length) {
-        const creations = list.slice(output.length);
-        for (const item of creations) {
+        for (let i = output.length, l = list.length; i < l; i++) {
           needsToPushOutput = true;
           const detailInput$ = channel();
           detailInput$List.push(detailInput$);
           output.push(xf(detailInput$));
-          deliveries.push(detailInput$.next(item));
+          const delivery = detailInput$.next(list[i]);
+          if (delivery !== resolved) {
+            deliveries.push(delivery);
+          }
         }
       } else if (list.length < output.length) {
-        const closures = detailInput$List.splice(list.length);
-        output.splice(list.length);
-        for (const detailInput of closures) {
+        for (let i = list.length, l = output.length; i < l; i++) {
           needsToPushOutput = true;
-          detailInput.complete();
+          const delivery = detailInput$List[i].complete();
+          if (delivery !== resolved) {
+            deliveries.push(delivery);
+          }
         }
+        detailInput$List.splice(list.length);
+        output.splice(list.length);
       }
 
       if (needsToPushOutput) {
@@ -79,60 +84,81 @@ function parallelize_observable_indexed<I, O>(
   source: Observable<I[]>,
   outerObserver: Observer<O[]>
 ) {
-  const detailInput$s: Channel<I>[] = [];
-  const keys: string[] = [];
-  const output: O[] = [];
+  let detailInput$s: Channel<I>[] = [];
+  let keys: string[] = [];
+  let output: O[] = [];
   return source({
     next: function parallelize_source_next(list: I[]): Task<any> {
+      const nextDetailInput$s: Channel<I>[] = [];
+      const nextKeys: string[] = [];
+      const nextOutput: O[] = [];
       const deliveries: Task<any>[] = [];
       let needsToPushOutput = false;
 
       for (let i = 0; i < list.length; i++) {
         const key = index(list[i]);
-
         const prevPos = keys.indexOf(key);
 
         if (prevPos >= 0) {
+          nextDetailInput$s[i] = detailInput$s[prevPos];
+          nextKeys[i] = keys[prevPos];
+          nextOutput[i] = output[prevPos];
+
           if (prevPos !== i) {
             needsToPushOutput = true;
-            keys.splice(i, 0, keys.splice(prevPos, 1)[0]);
-            output.splice(i, 0, output.splice(prevPos, 1)[0]);
-            detailInput$s.splice(i, 0, detailInput$s.splice(prevPos, 1)[0]);
           }
-          if (detailInput$s[i].valueOf() !== list[i]) {
-            deliveries.push(detailInput$s[i].next(list[i]));
+          if (nextDetailInput$s[i].valueOf() !== list[i]) {
+            const delivery = nextDetailInput$s[i].next(list[i]);
+            if (delivery !== resolved) {
+              deliveries.push(delivery);
+            }
           }
         } else {
           needsToPushOutput = true;
           const newDetailInput$ = channel();
           const newOutputEntry = xf(newDetailInput$);
-          keys[i] = index(list[i]);
-          detailInput$s[i] = newDetailInput$;
-          output[i] = newOutputEntry;
-          deliveries.push(newDetailInput$.next(list[i]));
+          nextKeys[i] = index(list[i]);
+          nextDetailInput$s[i] = newDetailInput$;
+          nextOutput[i] = newOutputEntry;
+          const delivery = newDetailInput$.next(list[i]);
+          if (delivery !== resolved) {
+            deliveries.push(delivery);
+          }
         }
       }
 
-      keys.splice(list.length);
-      output.splice(list.length);
-      for (const closure of detailInput$s.splice(list.length)) {
-        needsToPushOutput = true;
-        deliveries.push(closure.complete());
+      for (let i = 0, l = keys.length; i < l; i++) {
+        if (nextKeys.indexOf(keys[i]) < 0) {
+          needsToPushOutput = true;
+          const delivery = detailInput$s[i].complete();
+          if (delivery !== resolved) {
+            deliveries.push(delivery);
+          }
+        }
       }
 
       if (needsToPushOutput) {
-        deliveries.push(outerObserver.next(output.concat([])));
+        const delivery = outerObserver.next(nextOutput.concat([]));
+        if (delivery !== resolved) {
+          deliveries.push(delivery);
+        }
       }
 
-      return all(deliveries);
+      detailInput$s = nextDetailInput$s;
+      keys = nextKeys;
+      output = nextOutput;
+
+      return deliveries.length ? all(deliveries) : resolved;
     },
     complete: function parallelize_source_complete() {
-      output.splice(0);
-      return all(
-        detailInput$s.map(detailInput$ => {
-          return detailInput$ ? detailInput$.complete() : resolved;
-        })
-      );
+      const deliveries: Task<any>[] = [];
+      for (let i = 0, l = detailInput$s.length; i < l; i++) {
+        const delivery = detailInput$s[i].complete();
+        if (delivery !== resolved) {
+          deliveries.push(delivery);
+        }
+      }
+      return all(deliveries);
     }
   });
 }

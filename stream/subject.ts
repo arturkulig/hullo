@@ -1,4 +1,4 @@
-import { Cancellation, all, Task } from "../task";
+import { Cancellation, all, Task, resolved } from "../task";
 import { Observable, Observer } from "./observable";
 
 export function subject<T>(origin: Observable<T>): Observable<T> {
@@ -15,7 +15,10 @@ export function subject<T>(origin: Observable<T>): Observable<T> {
           // can be added and/or removed during iteration
           const deliveries: Task<any>[] = [];
           for (const leech of leeches) {
-            deliveries.push(leech.next(value));
+            const delivery = leech.next(value);
+            if (delivery !== resolved) {
+              deliveries.push(delivery);
+            }
           }
           return all(deliveries);
         },
@@ -24,7 +27,10 @@ export function subject<T>(origin: Observable<T>): Observable<T> {
           // can be added and/or removed during iteration
           const deliveries: Task<any>[] = [];
           for (const leech of leeches) {
-            deliveries.push(leech.complete());
+            const delivery = leech.complete();
+            if (delivery !== resolved) {
+              deliveries.push(delivery);
+            }
           }
           return all(deliveries);
         }
