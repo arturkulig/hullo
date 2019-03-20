@@ -1,10 +1,18 @@
 import { state } from "./state";
 import { ofMany } from "./ofMany";
 import { resolve, resolved } from "../task";
+import { Observer } from "./observable";
 
 describe("state", () => {
   it("regular", () => {
-    const s = state(0)(ofMany([1, 2, 4, 6]));
+    let remoteObserver: Observer<number> = {
+      next: _n => resolved,
+      complete: resolve
+    };
+    const s = state(0)(observer => {
+      remoteObserver = observer;
+      return () => {};
+    });
 
     const results: number[] = [];
     s({
@@ -15,7 +23,9 @@ describe("state", () => {
       complete: resolve
     });
 
-    expect(results).toEqual([1, 2, 4, 6]);
+    ofMany([1, 2, 4, 6])(remoteObserver);
+
+    expect(results).toEqual([0, 1, 2, 4, 6]);
   });
 
   it("latter sub gets last value", () => {

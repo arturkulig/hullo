@@ -38,42 +38,51 @@ function parallelize_observable_collected<I, O>(
 
       for (let i = 0; i < list.length && i < output.length; i++) {
         if (detailInput$List[i].valueOf() !== list[i]) {
-          deliveries.push(detailInput$List[i].next(list[i]));
+          const delivery = detailInput$List[i].next(list[i]);
+          if (delivery !== resolved) {
+            deliveries.push(delivery);
+          }
         }
       }
 
-      if (list.length > output.length) {
-        for (let i = output.length, l = list.length; i < l; i++) {
-          needsToPushOutput = true;
-          const detailInput$ = channel();
-          detailInput$List.push(detailInput$);
-          output.push(xf(detailInput$));
-          const delivery = detailInput$.next(list[i]);
-          if (delivery !== resolved) {
-            deliveries.push(delivery);
-          }
+      for (let i = output.length, l = list.length; i < l; i++) {
+        needsToPushOutput = true;
+        const detailInput$ = channel();
+        detailInput$List.push(detailInput$);
+        output.push(xf(detailInput$));
+        const delivery = detailInput$.next(list[i]);
+        if (delivery !== resolved) {
+          deliveries.push(delivery);
         }
-      } else if (list.length < output.length) {
-        for (let i = list.length, l = output.length; i < l; i++) {
-          needsToPushOutput = true;
-          const delivery = detailInput$List[i].complete();
-          if (delivery !== resolved) {
-            deliveries.push(delivery);
-          }
-        }
-        detailInput$List.splice(list.length);
-        output.splice(list.length);
       }
+      for (let i = list.length, l = output.length; i < l; i++) {
+        needsToPushOutput = true;
+        const delivery = detailInput$List[i].complete();
+        if (delivery !== resolved) {
+          deliveries.push(delivery);
+        }
+      }
+      detailInput$List.splice(list.length);
+      output.splice(list.length);
 
       if (needsToPushOutput) {
-        deliveries.push(outerObserver.next(output.concat([])));
+        const delivery = outerObserver.next(output.slice(0));
+        if (delivery !== resolved) {
+          deliveries.push(delivery);
+        }
       }
 
-      return all(deliveries);
+      return deliveries.length ? all(deliveries) : resolved;
     },
     complete: function parallelize_source_complete() {
-      output.splice(0);
-      return all(detailInput$List.splice(0).map(input => input.complete()));
+      const deliveries: Task<any>[] = [];
+      for (let i = 0, l = detailInput$List.length; i < l; i++) {
+        const delivery = detailInput$List[i].complete();
+        if (delivery !== resolved) {
+          deliveries.push(delivery);
+        }
+      }
+      return all(deliveries);
     }
   });
 }

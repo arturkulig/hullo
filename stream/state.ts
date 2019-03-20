@@ -11,8 +11,10 @@ export function state<T>(init: T) {
     const leeches: Observer<T>[] = [];
     let closed = false;
     let value = init;
-    let outerCancel: Cancellation | null = null;
-    let justPushed = false;
+    let outerCancel: Cancellation | null = source({
+      next: state_next,
+      complete: state_complete
+    });
 
     return Object.assign(
       buffer(function state_observable(observer: Observer<T>) {
@@ -20,16 +22,7 @@ export function state<T>(init: T) {
         if (closed) {
           observer.complete();
         } else {
-          justPushed = false;
-          if (!outerCancel) {
-            outerCancel = source({
-              next: state_next,
-              complete: state_complete
-            });
-          }
-          if (!justPushed) {
-            observer.next(value);
-          }
+          observer.next(value);
         }
 
         return function stateI_cancel() {
@@ -43,32 +36,6 @@ export function state<T>(init: T) {
             }
           }
         };
-
-        function state_next(v: T) {
-          value = v;
-          const deliveries: Task<any>[] = [];
-          for (const leech of leeches) {
-            const delivery = leech.next(v);
-            if (delivery !== resolved) {
-              deliveries.push(delivery);
-            }
-          }
-          justPushed = true;
-          return deliveries.length ? all(deliveries) : resolved;
-        }
-
-        function state_complete() {
-          closed = true;
-          const deliveries: Task<any>[] = [];
-          for (const leech of leeches) {
-            const delivery = leech.complete();
-            if (delivery !== resolved) {
-              deliveries.push(delivery);
-            }
-          }
-          justPushed = true;
-          return deliveries.length ? all(deliveries) : resolved;
-        }
       }),
       {
         valueOf: state_valueOf
@@ -77,6 +44,30 @@ export function state<T>(init: T) {
 
     function state_valueOf() {
       return value;
+    }
+
+    function state_next(v: T) {
+      value = v;
+      const deliveries: Task<any>[] = [];
+      for (const leech of leeches) {
+        const delivery = leech.next(v);
+        if (delivery !== resolved) {
+          deliveries.push(delivery);
+        }
+      }
+      return deliveries.length ? all(deliveries) : resolved;
+    }
+
+    function state_complete() {
+      closed = true;
+      const deliveries: Task<any>[] = [];
+      for (const leech of leeches) {
+        const delivery = leech.complete();
+        if (delivery !== resolved) {
+          deliveries.push(delivery);
+        }
+      }
+      return deliveries.length ? all(deliveries) : resolved;
     }
   };
 }

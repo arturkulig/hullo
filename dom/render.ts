@@ -203,10 +203,11 @@ function render_children_each(
 
   // diff
   let leftI = 0;
-  const leftLength = elements.length;
   let rightI = 0;
-  const rightLength = nextElements.length;
-  while (leftI < leftLength && rightI < rightLength) {
+  while (leftI < elements.length && rightI < nextElements.length) {
+    const leftLength = elements.length;
+    const rightLength = nextElements.length;
+
     const current = elements[leftI];
     const next = nextElements[rightI];
 
@@ -268,10 +269,7 @@ function render_children_each(
     }
     let rightStaysBenefit = leftI - currentInNext + rightStableLength;
 
-    if (leftStaysBenefit < 0 && rightStableLength < 0) {
-      htmlElement.removeChild(current);
-      leftI++;
-    } else if (leftStaysBenefit > rightStaysBenefit) {
+    if (leftStaysBenefit > rightStaysBenefit && rightStaysBenefit > 0) {
       for (let i = rightI; i < currentInNext; i++) {
         htmlElement.insertBefore(nextElements[i], current);
       }
@@ -279,7 +277,7 @@ function render_children_each(
 
       leftI += leftStableLength;
       rightI += leftStableLength;
-    } else {
+    } else if (rightStaysBenefit >= leftStaysBenefit && leftStaysBenefit > 0) {
       for (let i = leftI; i < nextInCurrent; i++) {
         htmlElement.removeChild(elements[i]);
       }
@@ -287,14 +285,22 @@ function render_children_each(
 
       leftI += rightStableLength;
       rightI += rightStableLength;
+    } else {
+      htmlElement.replaceChild(next, current);
+      leftI++;
+      rightI++;
+      elements.splice(nextInCurrent, 1);
+      shapes.splice(nextInCurrent, 1);
+      cancels.splice(nextInCurrent, 1);
+      abandons.splice(nextInCurrent, 1);
     }
   }
 
-  for (let i = leftI; i < leftLength; i++) {
+  for (let i = leftI; i < elements.length; i++) {
     htmlElement.removeChild(elements[i]);
   }
 
-  for (let i = rightI; i < rightLength; i++) {
+  for (let i = rightI; i < nextElements.length; i++) {
     htmlElement.appendChild(nextElements[i]);
   }
 
