@@ -1,7 +1,6 @@
-import { resolved, Cancellation } from "../task";
+import { resolved, Cancellation, Task, all } from "../task";
 import { Observable, Observer } from "./observable";
 import { buffer } from "./buffer";
-import { subject } from "./subject";
 
 export function state<T>(init: T) {
   return function state_op(
@@ -9,50 +8,75 @@ export function state<T>(init: T) {
   ): Observable<T> & {
     valueOf(): T;
   } {
-    const state: { closed: boolean; value: T } = { closed: false, value: init };
+    const leeches: Observer<T>[] = [];
+    let closed = false;
+    let value = init;
     let outerCancel: Cancellation | null = null;
-    // let remoteObserver: Observer<T> | null = null;
+    let justPushed = false;
 
     return Object.assign(
-      subject(
-        buffer(function state_observable(observer: Observer<T>) {
+      buffer(function state_observable(observer: Observer<T>) {
+        leeches.push(observer);
+        if (closed) {
+          observer.complete();
+        } else {
+          justPushed = false;
           if (!outerCancel) {
             outerCancel = source({
-              next: function state_next(v: T) {
-                state.value = v;
-                return observer ? observer.next(v) : resolved;
-              },
-              complete: function state_complete() {
-                state.closed = true;
-                return observer ? observer.complete() : resolved;
-              }
+              next: state_next,
+              complete: state_complete
             });
           }
-
-          if (state.closed) {
-            observer.complete();
-          } else {
-            observer = observer;
-            if ("value" in state) {
-              observer.next(state.value!);
-            }
+          if (!justPushed) {
+            observer.next(value);
           }
-          return function stateI_cancel() {
-            if (outerCancel) {
+        }
+
+        return function stateI_cancel() {
+          const pos = leeches.indexOf(observer);
+          if (pos >= 0) {
+            leeches.splice(pos);
+            if (leeches.length === 0 && outerCancel) {
               const cancel = outerCancel;
               outerCancel = null;
               cancel();
             }
-          };
-        })
-      ),
+          }
+        };
+
+        function state_next(v: T) {
+          value = v;
+          const deliveries: Task<any>[] = [];
+          for (const leech of leeches) {
+            const delivery = leech.next(v);
+            if (delivery !== resolved) {
+              deliveries.push(delivery);
+            }
+          }
+          justPushed = true;
+          return deliveries.length ? all(deliveries) : resolved;
+        }
+
+        function state_complete() {
+          closed = true;
+          const deliveries: Task<any>[] = [];
+          for (const leech of leeches) {
+            const delivery = leech.complete();
+            if (delivery !== resolved) {
+              deliveries.push(delivery);
+            }
+          }
+          justPushed = true;
+          return deliveries.length ? all(deliveries) : resolved;
+        }
+      }),
       {
         valueOf: state_valueOf
       }
     );
 
     function state_valueOf() {
-      return state.value;
+      return value;
     }
   };
 }
