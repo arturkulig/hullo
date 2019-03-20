@@ -1,15 +1,15 @@
 import { pipe } from "../../pipe";
-import { Cancellation } from "../../future";
+import { Cancellation } from "../../task";
 import {
   interval,
   map,
-  subject,
   Observable,
   observable,
   atom,
-  combineLatest
+  combineLatest,
+  state
 } from "../../stream";
-import { html, ElementShape, mount } from "../../dom";
+import { html, HulloElement, mount } from "../../dom";
 
 const rootElement = document.createElement("div");
 document.body.appendChild(rootElement);
@@ -20,6 +20,7 @@ const startTime = Date.now();
 
 function App() {
   return html.div({
+    sync: "branch",
     style: {
       position: "absolute",
       transformOrigin: "0 0",
@@ -57,7 +58,7 @@ function App() {
       text: pipe(
         interval(1000),
         map(t => Math.round(((t - startTime) / 1000) % 10).toString(10)),
-        subject
+        state(0)
       )
     })
   });
@@ -68,7 +69,7 @@ function SierpinskiTriangle(props: {
   y: number;
   size: number;
   text: Observable<string>;
-}): ElementShape[] {
+}): HulloElement[] {
   if (props.size <= targetSize) {
     return [
       Dot({
@@ -110,6 +111,9 @@ function Dot(data: {
   const hover$ = atom(false);
 
   return html.div({
+    deref: () => {
+      hover$.complete();
+    },
     events: {
       mouseover: () => {
         hover$.next(true);
