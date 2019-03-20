@@ -50,7 +50,12 @@ export function mold(
     if (!Object.prototype.hasOwnProperty.call(events, k)) {
       continue;
     }
-    possesions.push(render_event(htmlElement, k, events[k]));
+    const handler = events[k];
+    possesions.push(
+      typeof handler === "function"
+        ? render_event_regular(htmlElement, k, handler)
+        : render_event_observer(htmlElement, k, handler)
+    );
   }
 
   for (const k in style) {
@@ -312,18 +317,6 @@ function render_children_cleanup(
   }
 }
 
-function render_event<NAME extends string>(
-  htmlElement: HTMLElement,
-  name: NAME,
-  handler: In<HulloElement["events"], NAME>
-): Possesion {
-  if (typeof handler === "function") {
-    return render_event_regular<NAME>(htmlElement, name, handler);
-  } else {
-    return render_event_observer<NAME>(htmlElement, name, handler);
-  }
-}
-
 function render_event_regular<NAME extends string>(
   htmlElement: HTMLElement,
   name: NAME,
@@ -389,9 +382,13 @@ function render_prop<NAME extends string>(
   name: NAME,
   value: In<HulloElement["props"], NAME>
 ) {
+  const hasDefaultValue = name in htmlElement;
+  const defaultValue = hasDefaultValue ? (htmlElement as any)[name] : undefined;
   const state = {
     name,
-    ...(name in htmlElement ? { defaultValue: (htmlElement as any)[name] } : {})
+    hasDefaultValue,
+    defaultValue,
+    lastValue: defaultValue
   };
 
   return render_each(
@@ -408,17 +405,38 @@ function render_prop_each(
   htmlElement: HTMLElement,
   _syncOptions: SyncMode,
   value: any,
-  state: { name: string; defaultValue?: any }
+  state: {
+    name: string;
+    hasDefaultValue: boolean;
+    defaultValue: any;
+    lastValue: any;
+  }
 ) {
-  (htmlElement as any)[state.name] = value;
+  if (value !== state.lastValue) {
+    state.lastValue = value;
+    (htmlElement as any)[state.name] = value;
+  }
 }
 
 function render_prop_cleanup(
   htmlElement: HTMLElement,
   _syncOptions: SyncMode,
-  state: { name: string; defaultValue?: any }
+  state: {
+    name: string;
+    hasDefaultValue: boolean;
+    defaultValue: any;
+    lastValue: any;
+  }
 ) {
-  (htmlElement as any)[state.name] = state.defaultValue;
+  if (state.hasDefaultValue) {
+    if (state.defaultValue !== state.lastValue) {
+      (htmlElement as any)[state.name] = state.defaultValue;
+    }
+  } else {
+    if (name in htmlElement) {
+      delete (htmlElement as any)[state.name];
+    }
+  }
 }
 
 function render_style<NAME extends keyof CSSStyleDeclaration>(
@@ -427,7 +445,12 @@ function render_style<NAME extends keyof CSSStyleDeclaration>(
   name: NAME,
   value: HulloElement["style"][NAME]
 ) {
-  const state = { name, defaultValue: htmlElement.style[name] };
+  const defaultValue = htmlElement.style[name];
+  const state = {
+    name,
+    defaultValue,
+    lastValue: defaultValue
+  };
 
   return render_each(
     htmlElement,
@@ -443,17 +466,22 @@ function render_style_each(
   htmlElement: HTMLElement,
   _syncOptions: SyncMode,
   value: any,
-  state: { name: keyof CSSStyleDeclaration; defaultValue: any }
+  state: { name: keyof CSSStyleDeclaration; defaultValue: any; lastValue: any }
 ) {
-  htmlElement.style[state.name as any] = value;
+  if (value !== state.lastValue) {
+    state.lastValue = value;
+    htmlElement.style[state.name as any] = value;
+  }
 }
 
 function render_style_cleanup(
   htmlElement: HTMLElement,
   _syncOptions: SyncMode,
-  state: { name: keyof CSSStyleDeclaration; defaultValue: any }
+  state: { name: keyof CSSStyleDeclaration; defaultValue: any; lastValue: any }
 ) {
-  htmlElement.style[state.name as any] = state.defaultValue;
+  if (state.defaultValue !== state.lastValue) {
+    htmlElement.style[state.name as any] = state.defaultValue;
+  }
 }
 
 function render_attr<NAME extends string>(
@@ -468,7 +496,7 @@ function render_attr<NAME extends string>(
     htmlElement,
     syncOptions,
     value,
-    { name, defaultValue },
+    { name, defaultValue, lastValue: defaultValue },
     render_attr_each,
     render_attr_cleanup
   );
@@ -478,24 +506,29 @@ function render_attr_each(
   htmlElement: HTMLElement,
   _syncOptions: SyncMode,
   value: any,
-  state: { name: string; defaultValue: string | null }
+  state: { name: string; defaultValue: string | null; lastValue: string | null }
 ) {
-  if (value == null) {
-    htmlElement.removeAttribute(state.name);
-  } else {
-    htmlElement.setAttribute(state.name, value);
+  if (value !== state.lastValue) {
+    state.lastValue = value;
+    if (value == null) {
+      htmlElement.removeAttribute(state.name);
+    } else {
+      htmlElement.setAttribute(state.name, value);
+    }
   }
 }
 
 function render_attr_cleanup(
   htmlElement: HTMLElement,
   _syncOptions: SyncMode,
-  state: { name: string; defaultValue: string | null }
+  state: { name: string; defaultValue: string | null; lastValue: string | null }
 ) {
-  if (state.defaultValue == null) {
-    htmlElement.removeAttribute(state.name);
-  } else {
-    htmlElement.setAttribute(state.name, state.defaultValue);
+  if (state.defaultValue !== state.lastValue) {
+    if (state.defaultValue == null) {
+      htmlElement.removeAttribute(state.name);
+    } else {
+      htmlElement.setAttribute(state.name, state.defaultValue);
+    }
   }
 }
 

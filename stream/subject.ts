@@ -20,7 +20,7 @@ export function subject<T>(origin: Observable<T>): Observable<T> {
               deliveries.push(delivery);
             }
           }
-          return all(deliveries);
+          return deliveries.length ? all(deliveries) : resolved;
         },
         complete: function subject_observable_complete() {
           // does not Array::map as subscribers
@@ -32,7 +32,7 @@ export function subject<T>(origin: Observable<T>): Observable<T> {
               deliveries.push(delivery);
             }
           }
-          return all(deliveries);
+          return deliveries.length ? all(deliveries) : resolved;
         }
       });
     }
