@@ -82,6 +82,8 @@ function dispatch() {
           }
         } else if (frame.observation.stage === Stage.sending) {
           buffer.push(frame);
+        } else {
+          frameDispatched.call(frame, undefined);
         }
         break;
 
@@ -100,6 +102,8 @@ function dispatch() {
           }
         } else if (frame.observation.stage === Stage.sending) {
           buffer.push(frame);
+        } else {
+          frameDispatched.call(frame, undefined);
         }
         break;
 
@@ -454,8 +458,8 @@ function pipeObservers<T, U, X>(
 ] {
   const { through } = pipeline;
   if (Array.isArray(through)) {
-    const [nextPipe, xt] = through;
-    const po = new PipingObserver(xt, innerObserver);
+    const [nextPipe, xf] = through;
+    const po = new PipingObserver(xf, innerObserver);
     const [all, outerObserver] = pipeObservers(nextPipe, po);
     return [[po, ...all], outerObserver];
   } else {

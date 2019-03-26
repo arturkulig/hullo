@@ -36,9 +36,9 @@ export class Duplex<IN, OUT, ObserverCtx>
     observerContext: ObserverCtx
   );
   constructor(
-    private _observable: Observable<OUT>,
-    private _observer: IObserver<IN, ObserverCtx>,
-    private _observerContext: ObserverCtx = _observer as any
+    protected _observable: Observable<OUT>,
+    protected _observer: IObserver<IN, ObserverCtx>,
+    protected _observerContext: ObserverCtx = _observer as any
   ) {}
 
   next(value: IN): Task<any> {

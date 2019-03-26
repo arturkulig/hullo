@@ -26,6 +26,14 @@ export class Atom<T> extends Duplex<T, T, IObserver<T>> {
     const observer = new AtomObserver(wide);
     super(observable, observer);
   }
+
+  valueOf(): T {
+    const source: unknown = this._observable;
+    if (source instanceof State) {
+      return (source as State<T>).valueOf();
+    }
+    throw new Error();
+  }
 }
 
 function atomContext<T>(arg: AtomWideContext<T>): AtomContext<T> {

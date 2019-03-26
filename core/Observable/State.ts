@@ -29,6 +29,13 @@ export class State<T> extends Observable<
       initialSending: []
     });
   }
+
+  valueOf(): T {
+    if (!this._arg) {
+      throw new Error();
+    }
+    return "last" in this._arg ? this._arg!.last! : this._arg.initial;
+  }
 }
 
 function subjectContext<T>(arg: StateWideContext<T>): StateContext<T> {

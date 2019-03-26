@@ -182,16 +182,13 @@ class TaskConsumer<T> implements Consumer<T> {
   }
 }
 
-function valueProducer<T>(this: T, consumer: Consumer<T>): Cancellation<T> {
+function valueProducer<T>(this: T, consumer: Consumer<T>) {
   consumer.resolve(this);
-  return noopCancel;
 }
 
 function valueContext<T>(arg: T): T {
   return arg;
 }
-
-function noopCancel(this: any) {}
 
 // -- .map helper class
 
@@ -270,7 +267,7 @@ function simplex<T, U>(pipe: Pipeline<T, U>, value: T): U {
 function complexCancel<T, ExeArg, InnerExeCtx, U>(
   this: ComplexTaskContext<T, ExeArg, InnerExeCtx, U>
 ) {
-  if (this.cancel && this.cancel !== noopCancel) {
+  if (this.cancel) {
     this.cancel.call(this.innerExeCtx!);
   }
 }

@@ -219,7 +219,7 @@ function frameDeliveryProducer<T extends any[]>(
   if (this.sent) {
     consumer.resolve();
   } else {
-    this.acks = this.acks || [];
+    this.acks = this.acks == null ? [] : this.acks;
     this.acks.push(consumer);
   }
 }
