@@ -1,6 +1,6 @@
-import { Observable, Observer } from "../stream/observable";
+import { IObservable, IObserver } from "../core/observable";
 
-export type HulloElementChildren = HulloElement[] | Observable<HulloElement[]>;
+export type HulloElementChildren = HulloElement[] | IObservable<HulloElement[]>;
 
 export type SyncMode = "immediate" | "self" | "branch";
 
@@ -8,12 +8,14 @@ export interface HulloElementDescription {
   sync?: SyncMode;
   ref?: (element: HTMLElement) => void;
   deref?: (element: HTMLElement) => void;
-  attrs: { [id: string]: string | Observable<string | undefined> };
-  props: { [id: string]: any | Observable<any> };
+  attrs: { [id: string]: string | IObservable<string | undefined> };
+  props: { [id: string]: any | IObservable<any> };
   style: {
-    [id in keyof CSSStyleDeclaration]?: string | Observable<string | undefined>
+    [id in keyof CSSStyleDeclaration]?: string | IObservable<string | undefined>
   };
-  events: { [id: string]: Observer<Event> | ((event: Event) => any) };
+  events: {
+    [id: string]: IObserver<Event> | ((this: HTMLElement, event: Event) => any);
+  };
   children: HulloElementChildren;
 }
 

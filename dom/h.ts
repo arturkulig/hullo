@@ -1,5 +1,5 @@
 import { HulloElement, HulloElementDescription, element } from "./element";
-import { Observable } from "../stream/observable";
+import { IObservable } from "../core/observable";
 
 type CustomComponent<PROPS extends object> = (p: PROPS) => HulloElement;
 type TagNames = keyof ElementTagNameMap;
@@ -14,7 +14,7 @@ export function h<PROPS extends object>(
 export function h<TAG extends TagNames>(
   tag: TAG,
   props: HulloElementDescription,
-  ...children: HulloElement[] | [Observable<HulloElement[]>]
+  ...children: HulloElement[] | [IObservable<HulloElement[]>]
 ): HulloElement;
 export function h(...args: any[]): HulloElement {
   if (typeof args[0] === "function") {

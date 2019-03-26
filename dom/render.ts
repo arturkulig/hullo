@@ -1,7 +1,6 @@
 import { HulloElement, SyncMode } from "./element";
-import { resolve, resolved, then, schedule, Task } from "../task";
-import { Observable, Observer } from "../stream/observable";
-import { pipe } from "../pipe";
+import { Task, Consumer } from "../core/Task";
+import { IObserver, IObservable } from "../core/observable";
 
 interface RenderCancellation {
   (element: HTMLElement): void;
@@ -338,7 +337,7 @@ function render_event_regular<NAME extends string>(
   };
 
   function schedulingEventListener(event: Event) {
-    schedule(handler as (event: Event) => any, event);
+    Task.resolve(event).run(handler as (event: Event) => any, htmlElement);
   }
 }
 
@@ -347,10 +346,8 @@ function render_event_observer<NAME extends string>(
   name: NAME,
   handler: In<HulloElement["events"], NAME>
 ) {
-  const observer = handler as Observer<Event>;
+  const observer = handler as IObserver<Event>;
   let closed = false;
-  let processing = false;
-  let onLastSent = resolve();
 
   htmlElement.addEventListener(name, render_event_observer_listener);
 
@@ -365,20 +362,14 @@ function render_event_observer<NAME extends string>(
     }
     closed = true;
     htmlElement.removeEventListener(name, render_event_observer_listener);
-    onLastSent(observer.complete);
+    observer.complete();
   }
 
   function render_event_observer_listener<T extends Event>(event: T) {
-    if (closed || processing) {
+    if (closed) {
       return;
     }
-    processing = true;
-    onLastSent = pipe(
-      observer.next(event) || resolve(),
-      then<void, void>(() => {
-        processing = false;
-      })
-    );
+    observer.next(event);
   }
 }
 
@@ -541,36 +532,41 @@ function render_attr_cleanup(
 function render_each<T, S = {}>(
   htmlElement: HTMLElement,
   syncMode: SyncMode,
-  streamOrValue: Observable<T> | T,
+  streamOrValue: IObservable<T> | T,
   state: S,
   process: (h: HTMLElement, o: SyncMode, v: T, s: S) => void,
   cleanup: (h: HTMLElement, o: SyncMode, s: S) => void
 ): Possesion {
-  if (typeof streamOrValue === "function") {
-    const cancel = (streamOrValue as Observable<T>)({
+  if (
+    typeof streamOrValue === "object" &&
+    streamOrValue &&
+    (streamOrValue as any).subscribe
+  ) {
+    const subscription = (streamOrValue as IObservable<T>).subscribe({
       next: function render_each_value(singleValue) {
         process(htmlElement, syncMode, singleValue, state);
         if (syncMode === "immediate") {
-          return resolved;
+          return;
         }
         return whenPainted();
       },
       complete: cleanup
         ? function render_each_cleanup() {
             cleanup(htmlElement, syncMode, state);
-            return resolved;
           }
-        : resolve
+        : function() {}
     });
     return {
-      abandon: cancel,
+      abandon: () => {
+        subscription.cancel();
+      },
       cancel: () => {
         cleanup(htmlElement, syncMode, state);
-        cancel();
+        subscription.cancel();
       }
     };
   } else {
-    process(htmlElement, syncMode, streamOrValue, state);
+    process(htmlElement, syncMode, streamOrValue as T, state);
     return {
       abandon: noop,
       cancel: () => cleanup(htmlElement, syncMode, state)
@@ -578,56 +574,52 @@ function render_each<T, S = {}>(
   }
 }
 
-const whenPaintedCbs: Array<(v: void) => void> = [];
+const whenPaintedConsumers: Array<Consumer<void>> = [];
 let whenPaintedTask: null | Task = null;
 
 const whenPainted: () => Task =
   typeof window === "undefined" || !("requestAnimationFrame" in window)
     ? function getWhenPainted() {
         return (
-          whenPaintedTask ||
-          (whenPaintedTask = function whenPainter_timeout(resolve) {
-            if (whenPaintedCbs.length === 0) {
-              setTimeout(flushWhenPaintedCbs, 0);
-            }
-            whenPaintedCbs.push(resolve);
-            return function whenPainter_cancel() {
-              const pos = whenPaintedCbs.indexOf(resolve);
-              if (pos >= 0) {
-                whenPaintedCbs.splice(pos, 1);
-              }
-            };
-          })
+          whenPaintedTask || (whenPaintedTask = new Task(whenPainter_timeout))
         );
       }
     : function getWhenPainted() {
-        return (
-          whenPaintedTask ||
-          (whenPaintedTask = function whenPainted_raf(resolve) {
-            if (whenPaintedCbs.length === 0) {
-              window.requestAnimationFrame(flushWhenPaintedCbs);
-            }
-            whenPaintedCbs.push(resolve);
-            return function whenPainter_cancel() {
-              const pos = whenPaintedCbs.indexOf(resolve);
-              if (pos >= 0) {
-                whenPaintedCbs.splice(pos, 1);
-              }
-            };
-          })
-        );
+        return whenPaintedTask || (whenPaintedTask = new Task(whenPainted_raf));
       };
 
+function whenPainter_timeout(consumer: Consumer<void>) {
+  if (whenPaintedConsumers.length === 0) {
+    setTimeout(flushWhenPaintedCbs, 0);
+  }
+  whenPaintedConsumers.push(consumer);
+  return function whenPainter_cancel() {
+    const pos = whenPaintedConsumers.indexOf(consumer);
+    if (pos >= 0) {
+      whenPaintedConsumers.splice(pos, 1);
+    }
+  };
+}
+
+function whenPainted_raf(consumer: Consumer<void>) {
+  if (whenPaintedConsumers.length === 0) {
+    window.requestAnimationFrame(flushWhenPaintedCbs);
+  }
+  whenPaintedConsumers.push(consumer);
+  return function whenPainter_cancel() {
+    const pos = whenPaintedConsumers.indexOf(consumer);
+    if (pos >= 0) {
+      whenPaintedConsumers.splice(pos, 1);
+    }
+  };
+}
+
 function flushWhenPaintedCbs() {
-  schedule(flushWhenPaintedCbsI);
+  whenPaintedConsumers.splice(0).forEach(resolveConsumer);
 }
 
-function flushWhenPaintedCbsI() {
-  whenPaintedCbs.splice(0).forEach(call);
-}
-
-function call(f: (v: void) => void) {
-  f();
+function resolveConsumer(consumer: Consumer<void>) {
+  consumer.resolve();
 }
 
 function noop() {}
