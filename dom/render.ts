@@ -1,31 +1,36 @@
 import { HulloElement, SyncMode } from "./element";
 import { Task, Consumer } from "../core/Task";
-import { IObserver, IObservable } from "../core/observable";
+import {
+  IObserver,
+  IObservable,
+  PartialObserver,
+  Subscription
+} from "../core/observable";
 
-interface RenderCancellation {
-  (element: HTMLElement): void;
+interface RenderCancellation<CTX = Possesion> {
+  (this: CTX, element: HTMLElement, abandonment: boolean): void;
 }
 
-interface Possesion {
-  abandon: RenderCancellation;
-  cancel: RenderCancellation;
+interface Possesion<CTX = any> {
+  // abandon: RenderCancellation;
+  clean: RenderCancellation<CTX>;
 }
 
 export function render(shape: HulloElement) {
   const e = document.createElement(shape.tagName);
-  return { element: e, ...mold(e, shape) };
+  return { element: e, possesion: mold(e, shape) };
 }
 
 function render_internal(shape: HulloElement, inheritedSync: SyncMode) {
   const e = document.createElement(shape.tagName);
-  return { element: e, ...mold(e, shape, inheritedSync) };
+  return { element: e, possesion: mold(e, shape, inheritedSync) };
 }
 
 export function mold(
   htmlElement: HTMLElement,
   elementShape: HulloElement,
   inheritedSync?: SyncMode
-): Possesion {
+): JoinedPossesions {
   const { attrs, props, events, style, children } = elementShape;
   const syncOptions: SyncMode =
     elementShape.sync || inheritedSync || "immediate";
@@ -76,21 +81,55 @@ export function mold(
   if (elementShape.ref) {
     elementShape.ref(htmlElement);
   }
+
   if (elementShape.deref) {
-    possesions.push({
-      abandon: elementShape.deref,
-      cancel: elementShape.deref
-    });
+    const dp: DerefPossesion = {
+      shape: elementShape,
+      clean: derefCancel
+    };
+    possesions.push(dp);
   }
 
   return {
-    abandon: function render_mold_abandon() {
-      possesions.splice(0).forEach(possesion => possesion.abandon(htmlElement));
-    },
-    cancel: function render_mold_cancel() {
-      possesions.splice(0).forEach(possesion => possesion.cancel(htmlElement));
-    }
+    possesions,
+    clean: joinedPossesionsCancel
   };
+}
+
+interface JoinedPossesions extends Possesion<JoinedPossesions> {
+  possesions: Possesion[];
+  clean(
+    this: JoinedPossesions,
+    htmlElement: HTMLElement,
+    abandonment: boolean
+  ): void;
+}
+
+function joinedPossesionsCancel(
+  this: JoinedPossesions,
+  htmlElement: HTMLElement,
+  abandonment: boolean
+) {
+  for (let i = 0; i < this.possesions.length; i++) {
+    this.possesions[i].clean(htmlElement, abandonment);
+  }
+}
+
+interface DerefPossesion extends Possesion<DerefPossesion> {
+  shape: HulloElement;
+  clean(
+    this: DerefPossesion,
+    htmlElement: HTMLElement,
+    abandonment: boolean
+  ): void;
+}
+
+function derefCancel(
+  this: DerefPossesion,
+  htmlElement: HTMLElement,
+  _abandonment: boolean
+) {
+  this.shape.deref!(htmlElement);
 }
 
 type In<T, N extends keyof T> = T[N];
@@ -98,8 +137,7 @@ type In<T, N extends keyof T> = T[N];
 type ChildrenRegistry = {
   shapes: HulloElement[];
   elements: HTMLElement[];
-  abandons: RenderCancellation[];
-  cancels: RenderCancellation[];
+  possesions: Possesion[];
 };
 
 function render_children(
@@ -110,8 +148,7 @@ function render_children(
   const children: ChildrenRegistry = {
     shapes: [],
     elements: [],
-    abandons: [],
-    cancels: []
+    possesions: []
   };
 
   return render_each(
@@ -130,17 +167,22 @@ function render_children_each(
   nextShapes: Array<HulloElement>,
   children: ChildrenRegistry
 ) {
-  const { shapes, elements, cancels, abandons } = children;
+  const {
+    shapes,
+    elements,
+    possesions
+    //  abandons
+  } = children;
 
   const nextElements: typeof elements = [];
-  const nextCancels: typeof cancels = [];
-  const nextAbandons: typeof abandons = [];
+  const nextPossesions: typeof possesions = [];
+  // const nextAbandons: typeof abandons = [];
 
   for (let i = 0; i < Math.max(shapes.length, nextShapes.length); i++) {
     const currentShape = shapes[i];
     const currentElement = elements[i];
-    const currentCancel = cancels[i];
-    const currentAbandon = abandons[i];
+    const currentPossesion = possesions[i];
+    // const currentAbandon = abandons[i];
     const nextShape = nextShapes[i];
     let nextShapePrevPos = -1;
 
@@ -151,8 +193,8 @@ function render_children_each(
       currentShape === nextShape
     ) {
       nextElements.push(elements[i]);
-      nextCancels.push(cancels[i]);
-      nextAbandons.push(abandons[i]);
+      nextPossesions.push(possesions[i]);
+      // nextAbandons.push(abandons[i]);
     }
 
     // element exists and should be moved
@@ -162,41 +204,40 @@ function render_children_each(
       nextShapes.indexOf(nextShape) === i
     ) {
       nextElements.push(elements[nextShapePrevPos]);
-      nextCancels.push(cancels[nextShapePrevPos]);
-      nextAbandons.push(abandons[nextShapePrevPos]);
+      nextPossesions.push(possesions[nextShapePrevPos]);
+      // nextAbandons.push(abandons[nextShapePrevPos]);
     }
 
     //element remains
     else if (i < shapes.length && i < nextShapes.length) {
-      currentCancel(currentElement);
-
-      const { element, abandon, cancel } =
-        currentShape.tagName === nextShape.tagName
-          ? {
-              element: currentElement,
-              ...mold(currentElement, nextShape, syncOptions)
-            }
-          : render_internal(nextShape, syncOptions);
+      const abandon = currentShape.tagName !== nextShape.tagName;
+      currentPossesion.clean(currentElement, abandon);
+      const { element, possesion } = abandon
+        ? render_internal(nextShape, syncOptions)
+        : {
+            element: currentElement,
+            possesion: mold(currentElement, nextShape, syncOptions)
+          };
 
       nextElements.push(element);
-      nextAbandons.push(abandon);
-      nextCancels.push(cancel);
+      nextPossesions.push(possesion);
     }
 
     // element adding
     else if (i < nextShapes.length) {
-      const { element, abandon, cancel } = render_internal(
-        nextShape,
-        syncOptions
-      );
+      const {
+        element,
+        // abandon,
+        possesion
+      } = render_internal(nextShape, syncOptions);
       nextElements.push(element);
-      nextAbandons.push(abandon);
-      nextCancels.push(cancel);
+      // nextAbandons.push(abandon);
+      nextPossesions.push(possesion);
     }
 
     //
     else if (i < shapes.length) {
-      currentAbandon(currentElement);
+      // currentAbandon(currentElement);
     }
   }
 
@@ -290,8 +331,7 @@ function render_children_each(
       rightI++;
       elements.splice(nextInCurrent, 1);
       shapes.splice(nextInCurrent, 1);
-      cancels.splice(nextInCurrent, 1);
-      abandons.splice(nextInCurrent, 1);
+      possesions.splice(nextInCurrent, 1);
     }
   }
 
@@ -305,20 +345,16 @@ function render_children_each(
 
   children.shapes = nextShapes;
   children.elements = nextElements;
-  children.cancels = nextCancels;
-  children.abandons = nextAbandons;
+  children.possesions = nextPossesions;
 }
 
 function render_children_cleanup(
   htmlElement: HTMLElement,
   _syncOptions: SyncMode,
-  children: ChildrenRegistry
+  _children: ChildrenRegistry
 ) {
-  while (htmlElement.firstChild) {
-    htmlElement.removeChild(htmlElement.firstChild);
-  }
-  for (let i = 0, l = children.abandons.length; i < l; i++) {
-    children.abandons[i](children.elements[i]);
+  for (let i = 0, l = htmlElement.children.length; i < l; i++) {
+    htmlElement.removeChild(htmlElement.firstChild!);
   }
 }
 
@@ -326,12 +362,12 @@ function render_event_regular<NAME extends string>(
   htmlElement: HTMLElement,
   name: NAME,
   handler: In<HulloElement["events"], NAME>
-) {
+): Possesion {
   htmlElement.addEventListener(name, schedulingEventListener);
 
   return {
-    abandon: noop,
-    cancel: function cancelEventListenerApplication() {
+    // abandon: noop,
+    clean: function cancelEventListenerApplication() {
       htmlElement.removeEventListener(name, schedulingEventListener);
     }
   };
@@ -345,15 +381,15 @@ function render_event_observer<NAME extends string>(
   htmlElement: HTMLElement,
   name: NAME,
   handler: In<HulloElement["events"], NAME>
-) {
+): Possesion {
   const observer = handler as IObserver<Event>;
   let closed = false;
 
   htmlElement.addEventListener(name, render_event_observer_listener);
 
   return {
-    abandon: render_event_observer_cancel,
-    cancel: render_event_observer_cancel
+    // abandon: render_event_observer_cancel,
+    clean: render_event_observer_cancel
   };
 
   function render_event_observer_cancel() {
@@ -542,37 +578,74 @@ function render_each<T, S = {}>(
     streamOrValue &&
     (streamOrValue as any).subscribe
   ) {
-    const subscription = (streamOrValue as IObservable<T>).subscribe({
-      next: function render_each_value(singleValue) {
-        process(htmlElement, syncMode, singleValue, state);
-        if (syncMode === "immediate") {
-          return;
-        }
-        return whenPainted();
-      },
-      complete: cleanup
-        ? function render_each_cleanup() {
-            cleanup(htmlElement, syncMode, state);
-          }
-        : function() {}
-    });
-    return {
-      abandon: () => {
-        subscription.cancel();
-      },
-      cancel: () => {
-        cleanup(htmlElement, syncMode, state);
-        subscription.cancel();
-      }
+    const observer: RenderEachObserver<T, S> = {
+      htmlElement,
+      syncMode,
+      state,
+      process,
+      cleanup,
+      next: render_each_next
     };
+    const subscription = (streamOrValue as IObservable<T>).subscribe(observer);
+    const repc: RenderEachPossesions<S> = {
+      cleanup,
+      subscription,
+      syncMode,
+      state,
+      clean: render_each_possesionsClean
+    };
+    return repc;
   } else {
     process(htmlElement, syncMode, streamOrValue as T, state);
-    return {
-      abandon: noop,
-      cancel: () => cleanup(htmlElement, syncMode, state)
+    const repc: RenderEachPossesions<S> = {
+      cleanup,
+      syncMode,
+      state,
+      clean: render_each_possesionsClean
     };
+    return repc;
   }
 }
+
+interface RenderEachObserver<T, S = {}> extends PartialObserver<T> {
+  htmlElement: HTMLElement;
+  syncMode: SyncMode;
+  state: S;
+  process: (h: HTMLElement, o: SyncMode, v: T, s: S) => void;
+  cleanup: (h: HTMLElement, o: SyncMode, s: S) => void;
+}
+
+function render_each_next<T, S>(
+  this: RenderEachObserver<T, S>,
+  singleValue: T
+) {
+  this.process(this.htmlElement, this.syncMode, singleValue, this.state);
+  if (this.syncMode !== "immediate") {
+    return whenPainted();
+  }
+}
+
+interface RenderEachPossesions<S> extends Possesion<RenderEachPossesions<S>> {
+  cleanup: (h: HTMLElement, o: SyncMode, s: S) => void;
+  subscription?: Subscription;
+  syncMode: SyncMode;
+  state: S;
+}
+
+function render_each_possesionsClean<S>(
+  this: RenderEachPossesions<S>,
+  htmlElement: HTMLElement,
+  abandonment: boolean
+) {
+  if (!abandonment) {
+    this.cleanup(htmlElement, this.syncMode, this.state);
+  }
+  if (this.subscription && !this.subscription.closed) {
+    this.subscription.cancel();
+  }
+}
+
+// paint sync
 
 const whenPaintedConsumers: Array<Consumer<void>> = [];
 let whenPaintedTask: null | Task = null;
@@ -621,5 +694,3 @@ function flushWhenPaintedCbs() {
 function resolveConsumer(consumer: Consumer<void>) {
   consumer.resolve();
 }
-
-function noop() {}
