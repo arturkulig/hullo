@@ -1,34 +1,27 @@
-export type Reaction<T, ConsumeContext = void> = Partial<
-  Interest<T, ConsumeContext>
-> & {
-  interests?: Interest<T, any>[] | undefined;
-};
+export type FCV<T, C = any> = {
+  v: T;
+  fcs?: FC<T, any>[];
+} & (Partial<FC<T, C>>);
 
-export type NotDone<T, C = void> = Reaction<T, C> & { done: false };
-export type Done<T, C = void> = Reaction<T, C> & { done: true; result: T };
-
-export type Play<T, C = void> = NotDone<T, C> | Done<T, C>;
-
-interface Interest<T, CTX> {
-  consume: (this: CTX, value: T) => void;
-  consumeContext: CTX;
+export interface FC<T, C> {
+  f: (this: C, value: T) => void;
+  c: C;
 }
 
 let running = false;
-export let queue: Done<any, any>[] = [];
+export let queue: FCV<any, any>[] = [];
 
 export function schedule<T = void, C = void>(
   f: (this: C, arg: T) => any,
   c?: C,
   arg?: T
 ) {
-  const done: Done<T, C> = {
-    done: true,
-    consume: f,
-    consumeContext: c!,
-    result: arg!
+  const action: FCV<T, C> = {
+    f,
+    c: c!,
+    v: arg!
   };
-  queue.push(done);
+  queue.push(action);
   if (!running) {
     run();
   }
@@ -39,21 +32,15 @@ export function run(): void {
     return;
   }
   running = true;
-  const currentQueue = queue;
-  for (let i = 0; i < currentQueue.length; i++) {
-    const play = currentQueue[i];
-    if (play.consume) {
-      play.consume.call(play.consumeContext, play.result!);
+  for (let i = 0; i < queue.length; i++) {
+    const { f, c, v, fcs } = queue[i];
+    if (f) {
+      f.call(c, v);
     }
-    for (
-      let i = 0, l = play.interests ? play.interests.length : 0;
-      i < l;
-      i++
-    ) {
-      play.interests![i].consume.call(
-        play.interests![i].consumeContext,
-        play.result
-      );
+    if (fcs) {
+      for (let i = 0, l = fcs.length; i < l; i++) {
+        fcs![i].f.call(fcs![i].c, v);
+      }
     }
   }
   queue = [];

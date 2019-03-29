@@ -1,4 +1,4 @@
-import { Play, queue, run, Done } from "./schedule";
+import { queue, run, FC } from "./schedule";
 
 // Task
 export interface Consumer<T> {
@@ -7,6 +7,13 @@ export interface Consumer<T> {
 
 interface Producer<T, ExeCtx> {
   (this: ExeCtx, consumer: Consumer<T>): any;
+}
+
+const STAGE_NOT_DONE = { done: false as false };
+
+interface Resolution<T> {
+  stage: { done: true; value: T } | { done: false };
+  interest?: FC<T, any>[] | undefined;
 }
 
 export class Task<T = any, ExeCtx = any> {
@@ -34,80 +41,83 @@ export class Task<T = any, ExeCtx = any> {
   }
 
   get done() {
-    return this._play.done;
+    return this._res.stage.done;
   }
 
-  _play: Play<T, ExeCtx>;
+  _res: Resolution<T>;
 
   constructor(produce: Producer<T, ExeCtx>, ctx: ExeCtx);
   constructor(produce: Producer<T, any>);
   constructor();
   constructor(produce?: Producer<T, ExeCtx>, ctx?: ExeCtx) {
-    this._play = {
-      done: false
+    this._res = {
+      stage: STAGE_NOT_DONE
     };
     if (produce) {
       if (ctx !== undefined) {
-        produce.call(ctx, new TaskConsumer(this._play));
+        produce.call(ctx, new TaskConsumer(this._res));
       } else {
         ((produce as unknown) as Producer<T, void>)(
-          new TaskConsumer(this._play)
+          new TaskConsumer(this._res)
         );
       }
     }
   }
 
   unwrap(): T {
-    if (!this._play.done) {
+    if (!this._res.stage.done) {
       throw new Error("Cannot unwrap from Task not done yet");
     }
-    return this._play.result;
+    return this._res.stage.value;
   }
 
   run<ConsumeCtx>(
     consume: (this: ConsumeCtx, value: T) => void,
-    consumeContext?: ConsumeCtx
+    ctx?: ConsumeCtx
   ) {
-    if (this._play.done) {
-      consume.call(consumeContext as ConsumeCtx, this._play.result);
-    } else if (!this._play.interests) {
-      this._play.interests = [
+    if (this._res.stage.done) {
+      consume.call(ctx as ConsumeCtx, this._res.stage.value);
+    } else if (!this._res.interest) {
+      this._res.interest = [
         {
-          consume,
-          consumeContext
+          f: consume,
+          c: ctx
         }
       ];
     } else {
-      this._play.interests.push({
-        consume,
-        consumeContext
+      this._res.interest.push({
+        f: consume,
+        c: ctx
       });
     }
   }
 
-  map<U>(xt: (value: T) => U): Task<U> {
-    return new ComplexTask({
-      task: this,
-      followUp: xt
-    });
+  map<U>(xf: (v: T) => U): Task<U> {
+    return this._res.stage.done
+      ? new ValueTask(xf(this._res.stage.value))
+      : new ComplexTask({ task: this, xf });
   }
 
-  bind<U>(xt: (value: T) => Task<U>): Task<U> {
-    return new FollowingTask<T, U>({ task: this, followUp: xt });
+  bind<U>(xf: (value: T) => Task<U>): Task<U> {
+    return this._res.stage.done
+      ? xf(this._res.stage.value)
+      : new FollowingTask<T, U>({ task: this, followUp: xf });
   }
 }
 
 class TaskConsumer<T> implements Consumer<T> {
-  constructor(private _play: Play<T, any>) {}
+  constructor(private _res: Resolution<T>) {}
 
   resolve(value: T) {
-    if (!this._play.done) {
-      const play = (this._play as unknown) as Done<T>;
-      play.done = true;
-      play.result = value;
-      queue.push(play);
-      run();
+    if (this._res.stage.done) {
+      return;
     }
+    this._res.stage = { done: true, value };
+    queue.push({
+      v: value,
+      fcs: this._res.interest
+    });
+    run();
   }
 }
 
@@ -116,12 +126,11 @@ class TaskConsumer<T> implements Consumer<T> {
 class ValueTask<T> extends Task<T, T> {
   constructor(value: T) {
     super();
-    const play = (this._play as unknown) as Done<T>;
-    play.done = true;
-    play.result = value;
-    if (play.interests) {
-      for (let i = 0, l = play.interests.length; i < l; i += 1) {
-        play.interests[i].consume.call(play.interests[i].consumeContext, value);
+    const res = this._res;
+    res.stage = { done: true, value };
+    if (res.interest) {
+      for (let i = 0, l = res.interest.length; i < l; i += 1) {
+        res.interest[i].f.call(res.interest[i].c, value);
       }
     }
   }
@@ -131,7 +140,7 @@ class ValueTask<T> extends Task<T, T> {
 
 interface ComplexTaskContext<T, U> {
   task: Task<T>;
-  followUp: (value: T) => U;
+  xf: (value: T) => U;
 }
 
 class ComplexTask<T, U = void> extends Task<U, ComplexTaskContext<T, U>> {
@@ -155,7 +164,7 @@ function complexConsume<T, U>(
   this: { consumer: Consumer<U>; context: ComplexTaskContext<T, U> },
   value: T
 ) {
-  this.consumer.resolve(this.context.followUp(value));
+  this.consumer.resolve(this.context.xf(value));
 }
 
 // -- .bind helper class
@@ -195,11 +204,6 @@ function followingConsume2<T, U>(this: FollowingTaskContext<T, U>, value: U) {
 
 // ::all helper class
 
-interface JoinedTaskConsumeSingleContext<T extends any[]> {
-  i: number;
-  context: JoinedTaskContext<T>;
-}
-
 interface JoinedTaskContext<T extends any[]> {
   consumer?: Consumer<T>;
   oksLeft: number;
@@ -226,16 +230,26 @@ function joinedTaskProducer<T extends any[]>(
   consumer: Consumer<T>
 ) {
   this.consumer = consumer;
-  for (let i = 0, l = this.tasks.length; i < l; i++) {
-    this.tasks[i].run<JoinedTaskConsumeSingleContext<T>>(
-      joinedTaskConsumeSingle,
-      { i, context: this }
-    );
+  for (let i = 0, l = this.tasks.length, task = this.tasks[i]; i < l; i++) {
+    if (task.done) {
+      this.oks[i] = true;
+      this.oksLeft--;
+      this.result[i] = task.unwrap();
+    } else {
+      const ctx = {
+        i,
+        context: this
+      };
+      task.run<typeof ctx>(joinedTaskConsumeSingle, ctx);
+    }
+  }
+  if (this.oksLeft === 0) {
+    this.consumer!.resolve(this.result);
   }
 }
 
 function joinedTaskConsumeSingle<T extends any[], id extends keyof T>(
-  this: JoinedTaskConsumeSingleContext<T>,
+  this: { i: number; context: JoinedTaskContext<T> },
   value: T[id]
 ) {
   if (!this.context.oks[this.i]) {
