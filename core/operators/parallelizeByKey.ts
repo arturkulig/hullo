@@ -34,6 +34,7 @@ interface KeyedParallelContext<T, U> {
   successive: IObserver<U[]>;
   detail$s: Atom<T>[];
   keys: string[];
+  lastInput: T[];
   output: U[];
 }
 
@@ -47,62 +48,65 @@ function start<T, U>(
     identity: this.identity,
     detail$s: [],
     output: [],
+    lastInput: [],
     keys: []
   };
 }
 
 function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
-  const nextDetail$s: Atom<T>[] = [];
-  const nextKeys: string[] = [];
-  const nextOutput: U[] = [];
+  const nextDetail$s: Atom<T>[] = this.detail$s.slice(0, list.length);
+  const nextKeys: string[] = this.keys.slice(0, list.length);
+  const nextOutput: U[] = this.output.slice(0, list.length);
   const deliveries: Task<any>[] = [];
-  let needsToPushOutput = false;
+  let itemsMoved = 0;
+  let itemsCreated = 0;
+  let itemsRemoved = 0;
 
   for (let i = 0; i < list.length; i++) {
     const key = this.identity(list[i]);
     const prevPos = this.keys.indexOf(key);
 
     if (prevPos >= 0) {
-      nextDetail$s[i] = this.detail$s[prevPos];
-      nextKeys[i] = this.keys[prevPos];
-      nextOutput[i] = this.output[prevPos];
-
       if (prevPos !== i) {
-        needsToPushOutput = true;
+        nextDetail$s[i] = this.detail$s[prevPos];
+        nextKeys[i] = this.keys[prevPos];
+        nextOutput[i] = this.output[prevPos];
+        itemsMoved++;
       }
-      if (nextDetail$s[i].valueOf() !== list[i]) {
+      if (this.lastInput[prevPos] !== list[i]) {
         const delivery = nextDetail$s[i].next(list[i]);
-        if (delivery !== Task.resolved) {
+        if (!delivery.done) {
           deliveries.push(delivery);
         }
       }
     } else {
-      needsToPushOutput = true;
+      itemsCreated++;
       const detail$ = new Atom<T>(list[i]);
       const newOutputEntry = this.xf(detail$);
       nextKeys[i] = this.identity(list[i]);
       nextDetail$s[i] = detail$;
       nextOutput[i] = newOutputEntry;
       const delivery = detail$.next(list[i]);
-      if (delivery !== Task.resolved) {
+      if (!delivery.done) {
         deliveries.push(delivery);
       }
     }
   }
 
-  for (let i = 0, l = this.keys.length; i < l; i++) {
-    if (nextKeys.indexOf(this.keys[i]) < 0) {
-      needsToPushOutput = true;
-      const delivery = this.detail$s[i].complete();
-      if (delivery !== Task.resolved) {
-        deliveries.push(delivery);
+  if (list.length - itemsCreated - this.lastInput.length < 0)
+    for (let i = 0, l = this.keys.length; i < l; i++) {
+      if (nextKeys.indexOf(this.keys[i]) < 0) {
+        itemsRemoved++;
+        const delivery = this.detail$s[i].complete();
+        if (!delivery.done) {
+          deliveries.push(delivery);
+        }
       }
     }
-  }
 
-  if (needsToPushOutput) {
+  if (itemsMoved || itemsCreated || itemsRemoved) {
     const delivery = this.successive.next(nextOutput.slice(0));
-    if (delivery !== Task.resolved) {
+    if (!delivery.done) {
       deliveries.push(delivery);
     }
   }
@@ -110,6 +114,7 @@ function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
   this.detail$s = nextDetail$s;
   this.keys = nextKeys;
   this.output = nextOutput;
+  this.lastInput = list;
 
   return deliveries.length ? Task.all(deliveries) : Task.resolved;
 }
@@ -118,13 +123,13 @@ function complete<T, U>(this: KeyedParallelContext<T, U>) {
   const deliveries: Task<void>[] = [];
   for (let i = 0, l = this.detail$s.length; i < l; i++) {
     const delivery = this.detail$s[i].complete();
-    if (delivery !== Task.resolved) {
+    if (!delivery.done) {
       deliveries.push(delivery);
     }
   }
   {
     const delivery = this.successive.complete();
-    if (delivery !== Task.resolved) {
+    if (!delivery.done) {
       deliveries.push(delivery);
     }
   }

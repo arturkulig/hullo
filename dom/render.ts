@@ -647,7 +647,7 @@ function render_each_possesionsClean<S>(
 
 // paint sync
 
-const whenPaintedConsumers: Array<Consumer<void>> = [];
+let whenPaintedConsumer: null | Consumer<void> = null;
 let whenPaintedTask: null | Task = null;
 
 const whenPainted: () => Task =
@@ -662,35 +662,23 @@ const whenPainted: () => Task =
       };
 
 function whenPainter_timeout(consumer: Consumer<void>) {
-  if (whenPaintedConsumers.length === 0) {
+  if (whenPaintedConsumer) {
     setTimeout(flushWhenPaintedCbs, 0);
   }
-  whenPaintedConsumers.push(consumer);
-  return function whenPainter_cancel() {
-    const pos = whenPaintedConsumers.indexOf(consumer);
-    if (pos >= 0) {
-      whenPaintedConsumers.splice(pos, 1);
-    }
-  };
+  whenPaintedConsumer = consumer;
 }
 
 function whenPainted_raf(consumer: Consumer<void>) {
-  if (whenPaintedConsumers.length === 0) {
+  if (whenPaintedConsumer) {
     window.requestAnimationFrame(flushWhenPaintedCbs);
   }
-  whenPaintedConsumers.push(consumer);
-  return function whenPainter_cancel() {
-    const pos = whenPaintedConsumers.indexOf(consumer);
-    if (pos >= 0) {
-      whenPaintedConsumers.splice(pos, 1);
-    }
-  };
+  whenPaintedConsumer = consumer;
 }
 
 function flushWhenPaintedCbs() {
-  whenPaintedConsumers.splice(0).forEach(resolveConsumer);
-}
-
-function resolveConsumer(consumer: Consumer<void>) {
-  consumer.resolve();
+  if (whenPaintedConsumer) {
+    const _whenPaintedConsumer = whenPaintedConsumer;
+    whenPaintedConsumer = null;
+    _whenPaintedConsumer.resolve();
+  }
 }

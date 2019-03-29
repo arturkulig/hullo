@@ -52,7 +52,7 @@ it("Subject", async () => {
     .bind(() => remoteObserver.next(8))
     .run(() => remoteObserver.complete());
 
-  await new Promise(r => setTimeout(r, 100));
+  await new Promise(r => setTimeout(r, 1000));
 
   expect(sourceProducerCalled).toBe(1);
   expect(results1).toEqual([5, 6, 7, 8, Number.NEGATIVE_INFINITY]);

@@ -1,8 +1,26 @@
-import { Task, Consumer, Execution } from "../Task";
+import { schedule } from "../Task/schedule";
+import { Task, Consumer } from "../Task";
 import { Transducer } from "./Transducer";
 
+enum Stage {
+  active,
+  completed,
+  cancelled
+}
+
+interface Observation<T, ExecutionContext, ObserverContext> {
+  stage: Stage;
+  sending: Frame<T, ExecutionContext, ObserverContext> | undefined;
+
+  produce: Producer<T, ExecutionContext>;
+  cancel?: Cancellation<ExecutionContext>;
+  exeContext: ExecutionContext;
+
+  observer: PartialObserver<T, ObserverContext>;
+  observerContext: ObserverContext;
+}
+
 enum DispatchType {
-  init,
   message,
   completion,
   cancellation
@@ -10,188 +28,133 @@ enum DispatchType {
 
 interface Ack extends Consumer<void> {}
 
-type Frame<T, ExeCtx, ObserverCtx> =
-  | {
-      type: DispatchType.init;
-      observation: Observation<T, ExeCtx, ObserverCtx>;
-    }
+type Frame<T, ExecutionContext, ObserverContext> = {
+  delivered: boolean;
+  observation: Observation<T, ExecutionContext, ObserverContext>;
+  deliveryAck?: Ack;
+} & (
   | {
       type: DispatchType.message;
-      delivered: boolean;
-      observation: Observation<T, ExeCtx, ObserverCtx>;
       value: T;
-      acks?: Ack[];
     }
   | {
       type: DispatchType.completion;
-      delivered: boolean;
-      observation: Observation<T, ExeCtx, ObserverCtx>;
-      acks?: Ack[];
     }
   | {
       type: DispatchType.cancellation;
-      observation: Observation<T, ExeCtx, ObserverCtx>;
-    };
+    });
 
+let runScheduled = false;
 let running = false;
 let queue: Frame<any, any, any>[] = [];
 
 function run() {
-  new Task(dispatch).run(finishRunning);
-}
-
-function finishRunning() {
-  run();
+  if (runScheduled || running) {
+    return;
+  }
+  runScheduled = true;
+  schedule(dispatch);
 }
 
 function dispatch() {
+  // debugger;
+  runScheduled = false;
   if (running) {
     return;
   }
   running = true;
   const buffer: Frame<any, any, any>[] = [];
-  while (queue.length) {
-    const frame = queue.shift()!;
-    switch (frame.type) {
-      case DispatchType.init:
-        if (frame.observation.stage === Stage.none) {
-          frame.observation.stage = Stage.active;
-          const cancel = frame.observation.produce.call(
-            frame.observation.exeContext,
-            new Observer(frame.observation)
-          );
-          if (cancel) {
-            frame.observation.cancel = cancel;
-          }
-        }
-        break;
-
-      case DispatchType.message:
-        if (frame.observation.stage === Stage.active) {
-          frame.observation.stage = Stage.sending;
-          const task = frame.observation.observer.next
-            ? frame.observation.observer.next.call(
+  const currentQueue = queue;
+  for (let i = 0; i < currentQueue.length; i++) {
+    const frame = currentQueue[i];
+    if (frame.observation.stage !== Stage.active) {
+      // debugger;
+      continue;
+    }
+    if (frame.observation.sending && !frame.observation.sending.delivered) {
+      // debugger;
+      buffer.push(frame);
+    } else {
+      frame.observation.sending = frame;
+      switch (frame.type) {
+        case DispatchType.message:
+          // debugger;
+          const nextAck: Task<any> =
+            (frame.observation.observer.next &&
+              frame.observation.observer.next.call(
                 frame.observation.observerContext,
                 frame.value
-              )
-            : undefined;
-          if (task) {
-            task.run<Frame<any, any, any>>(frameDispatched, frame);
-          } else {
-            frameDispatched.call(frame, undefined);
-          }
-        } else if (frame.observation.stage === Stage.sending) {
-          buffer.push(frame);
-        } else {
-          frameDispatched.call(frame, undefined);
-        }
-        break;
+              )) ||
+            Task.resolved;
+          nextAck.run<Frame<any, any, any>>(
+            frameDeliveryConfirm,
+            frame.observation.sending
+          );
+          break;
 
-      case DispatchType.completion:
-        if (frame.observation.stage === Stage.active) {
-          frame.observation.stage = Stage.completed;
-          const task = frame.observation.observer.complete
-            ? frame.observation.observer.complete.call(
+        case DispatchType.completion:
+          // debugger;
+          const completeAck: Task<any> =
+            (frame.observation.observer.complete &&
+              frame.observation.observer.complete.call(
                 frame.observation.observerContext
-              )
-            : undefined;
-          if (task) {
-            task.run<Frame<any, any, any>>(frameDispatched, frame);
-          } else {
-            frameDispatched.call(frame, undefined);
-          }
-        } else if (frame.observation.stage === Stage.sending) {
-          buffer.push(frame);
-        } else {
-          frameDispatched.call(frame, undefined);
-        }
-        break;
+              )) ||
+            Task.resolved;
+          completeAck.run<Frame<any, any, any>>(
+            frameDeliveryConfirm,
+            frame.observation.sending
+          );
+          break;
 
-      case DispatchType.cancellation:
-        if (frame.observation.stage === Stage.active) {
+        case DispatchType.cancellation:
+          frame.delivered = true;
           frame.observation.stage = Stage.cancelled;
           if (frame.observation.cancel) {
             frame.observation.cancel.call(frame.observation.exeContext);
           }
-        } else if (frame.observation.stage === Stage.sending) {
-          buffer.push(frame);
-        }
-        break;
+          frame.observation.sending = undefined;
+          // debugger;
+          break;
+      }
     }
   }
   queue = buffer;
   running = false;
 }
 
-function frameDispatched<T, ExeCtx, ObserverCtx>(
-  this: Frame<T, ExeCtx, ObserverCtx>,
-  _value: any
-) {
-  if (
-    (this.type === DispatchType.message ||
-      this.type === DispatchType.completion) &&
-    !this.delivered
-  ) {
-    this.delivered = true;
-
-    this.observation.stage =
-      this.type === DispatchType.completion ? Stage.completed : Stage.active;
-
-    if (this.acks) {
-      for (let i = 0; i < this.acks.length; i++) {
-        this.acks[i].resolve();
-      }
-    }
-  }
-  if (!running) {
-    run();
-  }
-}
-
 export const observableSymbol = Symbol("is Observable");
 
-interface Cancellation<ExeCtx> {
-  (this: ExeCtx): void;
+interface Cancellation<ExecutionContext> {
+  (this: ExecutionContext): void;
 }
 export interface Subscription {
   closed: boolean;
   cancel(): void;
 }
-export interface IObserver<T, ObserverCtx = any> {
-  next(this: ObserverCtx, value: T): Task<any>;
-  complete(this: ObserverCtx): Task<any>;
+export interface IObserver<T, ObserverContext = any> {
+  next(this: ObserverContext, value: T): Task<any>;
+  complete(this: ObserverContext): Task<any>;
+}
+export interface SkippingObserver<T, ObserverContext = any> {
+  next: (this: ObserverContext, value: T) => void | Task<any>;
+  complete: (this: ObserverContext) => void | Task<any>;
+}
+export interface PartialObserver<T, ObserverContext = any> {
+  next?: (this: ObserverContext, value: T) => void | Task<any>;
+  complete?: (this: ObserverContext) => void | Task<any>;
 }
 export interface IObservable<T> {
   [observableSymbol]: boolean;
-  subscribe<ObserverCtx = any>(
-    observer: PartialObserver<T, ObserverCtx>,
-    observerContext?: ObserverCtx
+  subscribe<ObserverContext = any>(
+    observer: PartialObserver<T, ObserverContext>,
+    observerContext?: ObserverContext
   ): Subscription;
   pipe<U>(transducer: Transducer<T, U, any>): IObservable<U>;
 }
-export interface PartialObserver<T, ObserverCtx = any> {
-  next?: (this: ObserverCtx, value: T) => void | Task<any>;
-  complete?: (this: ObserverCtx) => void | Task<any>;
-}
-interface Producer<T, ExeCtx> {
-  (this: ExeCtx, observer: IObserver<T>): void | Cancellation<ExeCtx>;
-}
-enum Stage {
-  none,
-  active,
-  sending,
-  completed,
-  cancelled
-}
-interface Observation<T, ExeCtx, ObserverCtx> {
-  stage: Stage;
-
-  produce: Producer<T, ExeCtx>;
-  cancel?: Cancellation<ExeCtx>;
-  exeContext: ExeCtx;
-
-  observer: PartialObserver<T, ObserverCtx>;
-  observerContext: ObserverCtx;
+interface Producer<T, ExecutionContext> {
+  (this: ExecutionContext, observer: IObserver<T>): void | Cancellation<
+    ExecutionContext
+  >;
 }
 type Pipeline<IN, OUT, X = any> = {
   through:
@@ -199,7 +162,7 @@ type Pipeline<IN, OUT, X = any> = {
     | [Pipeline<IN, X>, Transducer<X, OUT, any>];
 };
 
-export class Observable<T, ExeCtx = any, ExeArg = any>
+export class Observable<T, ExecutionContext = any, ExeArg = any>
   implements IObservable<T> {
   [observableSymbol] = true;
   static symbol = observableSymbol;
@@ -239,44 +202,49 @@ export class Observable<T, ExeCtx = any, ExeArg = any>
   }
 
   constructor(
-    produce: Producer<T, ExeCtx>,
-    getContext: (arg: ExeArg) => ExeCtx,
+    produce: Producer<T, ExecutionContext>,
+    getContext: (arg: ExeArg) => ExecutionContext,
     arg: ExeArg
   );
   constructor(produce: Producer<T, any>);
   constructor(
-    protected _produce: Producer<T, ExeCtx>,
-    protected _getContext?: (arg: ExeArg) => ExeCtx,
+    protected _produce: Producer<T, ExecutionContext>,
+    protected _getContext?: (arg: ExeArg) => ExecutionContext,
     protected _arg?: ExeArg
   ) {}
 
   subscribe(observer: PartialObserver<T>): Subscription;
-  subscribe<ObserverCtx = any>(
-    observer: PartialObserver<T, ObserverCtx>,
-    observerContext?: ObserverCtx
+  subscribe<ObserverContext = any>(
+    observer: PartialObserver<T, ObserverContext>,
+    observerContext?: ObserverContext
   ): Subscription;
-  subscribe<ObserverCtx = any>(
-    observer: PartialObserver<T, ObserverCtx>,
-    observerContext?: ObserverCtx
+  subscribe<ObserverContext = any>(
+    observer: PartialObserver<T, ObserverContext>,
+    observerContext?: ObserverContext
   ): Subscription {
     const exeContext = this._getContext
       ? this._getContext(this._arg!)
-      : ((undefined as any) as ExeCtx);
-    const observation: Observation<T, ExeCtx, ObserverCtx> = {
-      stage: Stage.none,
+      : ((undefined as any) as ExecutionContext);
+
+    const observation: Observation<T, ExecutionContext, ObserverContext> = {
+      stage: Stage.active,
+      sending: undefined,
       observer,
-      observerContext: (observerContext || observer) as ObserverCtx,
+      observerContext: (observerContext || observer) as ObserverContext,
       exeContext,
       produce: this._produce
     };
+
     const exe = new ObservableSubscription(observation);
-    queue.push({
-      type: DispatchType.init,
-      observation
-    });
-    if (!running) {
-      run();
+
+    const cancel = observation.produce.call(
+      observation.exeContext,
+      new Observer(observation)
+    );
+    if (cancel) {
+      observation.cancel = cancel;
     }
+
     return exe;
   }
 
@@ -290,123 +258,143 @@ export class Observable<T, ExeCtx = any, ExeArg = any>
   }
 }
 
-class ObservableSubscription<T, ExeCtx, ObserverCtx> implements Subscription {
+class ObservableSubscription<T, ExecutionContext, ObserverContext>
+  implements Subscription {
   get closed() {
     return (
       this._observation.stage === Stage.cancelled ||
       this._observation.stage === Stage.completed
     );
   }
-  constructor(private _observation: Observation<T, ExeCtx, ObserverCtx>) {}
+  constructor(
+    private _observation: Observation<T, ExecutionContext, ObserverContext>
+  ) {}
 
   cancel() {
-    const frame: Frame<T, ExeCtx, ObserverCtx> = {
+    const frame: Frame<T, ExecutionContext, ObserverContext> = {
       type: DispatchType.cancellation,
-      observation: this._observation
+      observation: this._observation,
+      delivered: true
     };
     queue.push(frame);
-    if (!running) {
-      run();
-    }
+    run();
   }
 }
 
-class Observer<T, ExeCtx, ObserverCtx> implements IObserver<T, ObserverCtx> {
-  constructor(private _observation: Observation<T, ExeCtx, ObserverCtx>) {}
+class Observer<T, ExecutionContext, ObserverContext>
+  implements IObserver<T, ObserverContext> {
+  constructor(
+    private _observation: Observation<T, ExecutionContext, ObserverContext>
+  ) {}
 
   next(value: T) {
-    const frame: Frame<T, ExeCtx, ObserverCtx> = {
+    if (!this._observation.observer.next) {
+      return Task.resolved;
+    }
+
+    const frame: Frame<T, ExecutionContext, ObserverContext> = {
       type: DispatchType.message,
-      delivered: false,
       observation: this._observation,
-      value
+      value,
+      delivered: false
     };
     queue.push(frame);
-    if (!running) {
-      run();
+    // debugger;
 
-      if (frame.delivered) {
-        return Task.resolve();
-      }
+    run();
+
+    if (frame.delivered) {
+      return Task.resolved;
     }
-    return new Task(frameDeliveryProducer, frameDeliveryContext, frame);
+
+    return new Task(frameDeliveryProducer, frame);
   }
 
   complete() {
-    const frame: Frame<T, ExeCtx, ObserverCtx> = {
-      type: DispatchType.completion,
-      delivered: false,
-      observation: this._observation
-    };
-    queue.push(frame);
-    if (!running) {
-      run();
-
-      if (frame.delivered) {
-        return Task.resolve();
-      }
+    if (!this._observation.observer.complete) {
+      return Task.resolved;
     }
-    return new Task(frameDeliveryProducer, frameDeliveryContext, frame);
+
+    const frame: Frame<T, ExecutionContext, ObserverContext> = {
+      type: DispatchType.completion,
+      observation: this._observation,
+      delivered: false
+    };
+    // debugger;
+
+    queue.push(frame);
+
+    run();
+
+    if (frame.delivered) {
+      return Task.resolved;
+    }
+
+    return new Task(frameDeliveryProducer, frame);
   }
 }
 
-function frameDeliveryProducer(
-  this: Frame<any, any, any>,
+function frameDeliveryProducer<T, U, V>(
+  this: Frame<T, U, V>,
   consumer: Consumer<void>
 ) {
-  if (
-    this.type === DispatchType.init ||
-    this.type === DispatchType.cancellation
-  ) {
+  if (this.delivered) {
+    // debugger;
     consumer.resolve();
   } else {
-    if (this.delivered) {
-      consumer.resolve();
-    } else {
-      this.acks = this.acks || [];
-      this.acks.push(consumer);
-    }
+    // debugger;
+    this.deliveryAck = consumer;
   }
 }
 
-function frameDeliveryContext(
-  frame: Frame<any, any, any>
-): Frame<any, any, any> {
-  return frame;
+function frameDeliveryConfirm<T, U, V>(this: Frame<T, U, V>) {
+  if (
+    this.type === DispatchType.completion ||
+    this.type === DispatchType.message
+  ) {
+    this.observation.sending = undefined;
+    this.delivered = true;
+    if (this.deliveryAck) {
+      this.deliveryAck.resolve();
+    }
+    // debugger;
+  }
+
+  run();
 }
 
 // --
 
-interface PipingArgument<T, U, ExeCtx, ExeArg> {
-  produce: Producer<T, ExeCtx>;
-  getContext?: (arg: ExeArg) => ExeCtx;
+interface PipingArgument<T, U, ExecutionContext, ExeArg> {
+  produce: Producer<T, ExecutionContext>;
+  getContext?: (arg: ExeArg) => ExecutionContext;
   arg?: ExeArg;
   pipeline: Pipeline<T, U>;
 }
 
-interface PipingContext<T, U, ExeCtx, ExeArg>
-  extends PipingArgument<T, U, ExeCtx, ExeArg> {
+interface PipingContext<T, U, ExecutionContext, ExeArg>
+  extends PipingArgument<T, U, ExecutionContext, ExeArg> {
   pipes?: PipingObserver<any, any, any>[];
-  exeCtx?: ExeCtx;
-  cancel?: Cancellation<ExeCtx>;
+  exeCtx?: ExecutionContext;
+  cancel?: Cancellation<ExecutionContext>;
 }
 
-class PipingObservable<T, U, ExeCtx, ExeArg> extends Observable<
+class PipingObservable<T, U, ExecutionContext, ExeArg> extends Observable<
   U,
-  PipingContext<T, U, ExeCtx, ExeArg>,
-  PipingArgument<T, U, ExeCtx, ExeArg>
+  PipingContext<T, U, ExecutionContext, ExeArg>,
+  PipingArgument<T, U, ExecutionContext, ExeArg>
 > {
   constructor(
     pipeline: Pipeline<T, U>,
-    produce: Producer<T, ExeCtx>,
-    getContext: (arg: ExeArg) => ExeCtx,
+    produce: Producer<T, ExecutionContext>,
+    getContext: (arg: ExeArg) => ExecutionContext,
     arg: ExeArg
   );
   constructor(pipeline: Pipeline<T, U>, produce: Producer<T, any>);
   constructor(
     protected _ogPipeline: Pipeline<T, U>,
-    protected _ogProduce: Producer<T, ExeCtx>,
-    protected _ogGetContext?: (arg: ExeArg) => ExeCtx,
+    protected _ogProduce: Producer<T, ExecutionContext>,
+    protected _ogGetContext?: (arg: ExeArg) => ExecutionContext,
     protected _ogArg?: ExeArg
   ) {
     super(pipingProduce, pipingContext, {
@@ -418,7 +406,7 @@ class PipingObservable<T, U, ExeCtx, ExeArg> extends Observable<
   }
 
   pipe<Y>(transducer: Transducer<U, Y, any>): IObservable<Y> {
-    return new PipingObservable<T, Y, ExeCtx, ExeArg>(
+    return new PipingObservable<T, Y, ExecutionContext, ExeArg>(
       { through: [this._ogPipeline, transducer] },
       this._ogProduce,
       this._ogGetContext!,
@@ -427,22 +415,22 @@ class PipingObservable<T, U, ExeCtx, ExeArg> extends Observable<
   }
 }
 
-function pipingContext<T, U, ExeCtx, ExeArg>(
-  arg: PipingArgument<T, U, ExeCtx, ExeArg>
-): PipingContext<T, U, ExeCtx, ExeArg> {
+function pipingContext<T, U, ExecutionContext, ExeArg>(
+  arg: PipingArgument<T, U, ExecutionContext, ExeArg>
+): PipingContext<T, U, ExecutionContext, ExeArg> {
   return arg;
 }
 
-function pipingProduce<T, U, ExeCtx, ExeArg>(
-  this: PipingContext<T, U, ExeCtx, ExeArg>,
-  observer: IObserver<U>
+function pipingProduce<T, U, ExecutionContext, ExeArg>(
+  this: PipingContext<T, U, ExecutionContext, ExeArg>,
+  observer: SkippingObserver<U>
 ) {
   this.exeCtx = this.getContext
     ? this.getContext(this.arg!)
-    : ((undefined as any) as ExeCtx);
+    : ((undefined as any) as ExecutionContext);
   const [pipes, po] = pipeObservers(this.pipeline, observer);
   this.pipes = pipes;
-  const cancel = this.produce.call(this.exeCtx, po);
+  const cancel = this.produce.call(this.exeCtx, new PipingObserverAdapter(po));
   if (cancel) {
     this.cancel = cancel;
   }
@@ -451,7 +439,7 @@ function pipingProduce<T, U, ExeCtx, ExeArg>(
 
 function pipeObservers<T, U, X>(
   pipeline: Pipeline<T, U, X>,
-  innerObserver: IObserver<U>
+  innerObserver: SkippingObserver<U>
 ): [
   [PipingObserver<any, U, any>, ...PipingObserver<any, any, any>[]],
   PipingObserver<T, any, any>
@@ -468,8 +456,8 @@ function pipeObservers<T, U, X>(
   }
 }
 
-function pipingCancel<T, U, ExeCtx, ExeArg>(
-  this: PipingContext<T, U, ExeCtx, ExeArg>
+function pipingCancel<T, U, ExecutionContext, ExeArg>(
+  this: PipingContext<T, U, ExecutionContext, ExeArg>
 ) {
   if (this.cancel) {
     this.cancel.call(this.exeCtx!);
@@ -481,18 +469,33 @@ function pipingCancel<T, U, ExeCtx, ExeArg>(
   }
 }
 
-class PipingObserver<T, U, XdCtx> implements IObserver<T> {
+class PipingObserverAdapter<T, U, XdCtx> implements IObserver<T, XdCtx> {
+  constructor(private _observer: PipingObserver<T, U, XdCtx>) {}
+
+  next(value: T) {
+    return this._observer.next(value) || Task.resolved;
+  }
+
+  complete() {
+    return this._observer.complete() || Task.resolved;
+  }
+}
+
+class PipingObserver<T, U, XdCtx> implements SkippingObserver<T, XdCtx> {
   exeCtx: XdCtx;
 
-  constructor(private _xt: Transducer<T, U, XdCtx>, _observer: IObserver<U>) {
+  constructor(
+    private _xt: Transducer<T, U, XdCtx>,
+    _observer: SkippingObserver<U>
+  ) {
     this.exeCtx = this._xt.start(_observer);
   }
 
-  next(value: T): Task<any> {
+  next(value: T) {
     return this._xt.next.call(this.exeCtx, value);
   }
 
-  complete(): Task<any> {
+  complete() {
     return this._xt.complete.call(this.exeCtx);
   }
 
@@ -512,7 +515,6 @@ interface AsyncSourceContext<T> {
   asyncIterator?: AsyncIterator<T>;
   resultHandler?: (r: IteratorResult<T>) => void;
   retrieving: boolean;
-  sending: Execution | null;
   drained: boolean;
   cancelled: boolean;
 }
@@ -522,8 +524,7 @@ function asyncSourceContext<T>(arg: AsyncSourceArg<T>): AsyncSourceContext<T> {
     asyncIterable: arg,
     retrieving: false,
     drained: false,
-    cancelled: false,
-    sending: null
+    cancelled: false
   };
 }
 
@@ -541,13 +542,9 @@ function asyncSourceProduce<T>(
     }
     if (iteration.done) {
       this.drained = true;
-      this.sending = observer
-        .complete()
-        .run<typeof this>(asyncSourceIterate, this);
+      observer.complete().run<typeof this>(asyncSourceIterate, this);
     } else {
-      this.sending = observer
-        .next(iteration.value)
-        .run<typeof this>(asyncSourceIterate, this);
+      observer.next(iteration.value).run<typeof this>(asyncSourceIterate, this);
     }
   };
   const asi: (this: AsyncSourceContext<T>) => void = asyncSourceIterate;
@@ -558,9 +555,6 @@ function asyncSourceProduce<T>(
 
 function asyncSourceCancel<T>(this: AsyncSourceContext<T>) {
   this.cancelled = true;
-  if (this.sending) {
-    this.sending.cancel();
-  }
   if (!this.retrieving && this.asyncIterator && this.asyncIterator.return) {
     this.asyncIterator.return();
   }
@@ -591,13 +585,12 @@ interface SyncSourceContext<T> {
   iterable: Iterable<T>;
   iterator?: Iterator<T>;
   observer?: IObserver<T>;
-  sending: Execution | null;
   cancelled: boolean;
   drained: boolean;
 }
 
 function syncSourceContext<T>(arg: SyncSourceArg<T>): SyncSourceContext<T> {
-  return { iterable: arg, sending: null, cancelled: false, drained: false };
+  return { iterable: arg, cancelled: false, drained: false };
 }
 
 function syncSourceProduce<T>(
@@ -613,17 +606,12 @@ function syncSourceProduce<T>(
 
 function syncSourceCancel<T>(this: SyncSourceContext<T>) {
   this.cancelled = true;
-  if (this.sending) {
-    this.sending.cancel();
-  }
   if (this.iterator && this.iterator.return) {
     this.iterator.return();
   }
 }
 
 function syncSourceIterate<T>(this: SyncSourceContext<T>) {
-  this.sending = null;
-
   if (!this.observer) {
     return;
   }
@@ -638,11 +626,9 @@ function syncSourceIterate<T>(this: SyncSourceContext<T>) {
 
   if (iteration.done) {
     this.drained = true;
-    this.sending = this.observer
-      .complete()
-      .run<typeof this>(syncSourceIterate, this);
+    this.observer.complete().run<typeof this>(syncSourceIterate, this);
   } else {
-    this.sending = this.observer
+    this.observer
       .next(iteration.value)
       .run<typeof this>(syncSourceIterate, this);
   }
@@ -655,7 +641,6 @@ type UnitArg<T> = T;
 interface UnitContext<T> {
   value: T;
   closed: boolean;
-  sending?: Execution;
   observer?: IObserver<T>;
 }
 
@@ -668,7 +653,7 @@ function unitContext<T>(arg: UnitArg<T>): UnitContext<T> {
 
 function unitProducer<T>(this: UnitContext<T>, observer: IObserver<T>) {
   this.observer = observer;
-  this.sending = observer.next(this.value).run<typeof this>(unitClose, this);
+  observer.next(this.value).run<typeof this>(unitClose, this);
 
   return unitCancel;
 }
@@ -686,7 +671,4 @@ function unitCancel<T>(this: UnitContext<T>) {
     return;
   }
   this.closed = true;
-  if (this.sending) {
-    this.sending.cancel();
-  }
 }

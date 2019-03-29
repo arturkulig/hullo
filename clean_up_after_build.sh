@@ -4,5 +4,5 @@ find . -type f -mindepth 2 -maxdepth 2 -name index.ts |
     xargs -n1 -I{} dirname {} |
     while read -r loc; do
         echo "❌ $loc";
-        find "$loc" -type f -iname "*.js" -depth 1 -delete
+        find "$loc" -type f -iname "*.js" -delete
     done

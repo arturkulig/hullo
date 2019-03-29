@@ -5,18 +5,10 @@ interface TimeoutContext {
   token?: any;
 }
 
-type TimeoutArgument = number;
-
-export class Timeout extends Task<number, TimeoutContext, TimeoutArgument> {
-  constructor(n: number) {
-    super(timeoutProducer, timeoutContext, n);
+export class Timeout extends Task<number, TimeoutContext> {
+  constructor(time: number) {
+    super(timeoutProducer, { time });
   }
-}
-
-function timeoutContext(arg: TimeoutArgument): TimeoutContext {
-  return {
-    time: arg
-  };
 }
 
 function timeoutProducer(this: TimeoutContext, consumer: Consumer<number>) {

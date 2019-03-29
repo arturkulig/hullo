@@ -42,55 +42,15 @@ describe("Task", () => {
     });
   });
 
-  it("once cancelled cannot be resolved", async () => {
-    const t = new Task<number>(consumer => {
-      setTimeout(() => consumer.resolve(6), 100);
-      return () => {
-        /**
-         * The test is about not really cancelling the resolve
-         * and proving that `resolve` function becomes numb.
-         * Therefore this should not cancel the timeout
-         * event though in real app that should be the case.
-         */
-      };
-    });
-    const submitted = new Array<number>();
-    const sub = t.run(n => {
-      submitted.push(n);
-    });
-
-    await new Promise(r => setTimeout(r, 10));
-    sub.cancel();
-
-    await new Promise(r => setTimeout(r, 200));
-    expect(submitted).toEqual([]);
-  });
-
-  it("cancellation will be called once", () => {
-    let times = 0;
-    const t = new Task(() => {
-      return () => {
-        times++;
-      };
-    });
-    const sub = t.run(() => {});
-    expect(times).toBe(0);
-    sub.cancel();
-    sub.cancel();
-    expect(times).toBe(1);
-  });
-
-  it("producer is called with every result subscription", () => {
+  it("producer is called once despite subscriptions", () => {
     let times = 0;
     const t = new Task(() => {
       times++;
     });
-    expect(times).toBe(0);
-    const sub1 = t.run(() => {});
     expect(times).toBe(1);
-    const sub2 = t.run(() => {});
-    expect(times).toBe(2);
-    sub1.cancel();
-    sub2.cancel();
+    t.run(() => {});
+    expect(times).toBe(1);
+    t.run(() => {});
+    expect(times).toBe(1);
   });
 });

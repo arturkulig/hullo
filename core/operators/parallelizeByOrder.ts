@@ -47,7 +47,7 @@ function next<T, U>(this: OrderedParallelContext<T, U>, list: T[]) {
   for (let i = 0; i < list.length && i < this.output.length; i++) {
     if (this.detail$s[i].valueOf() !== list[i]) {
       const delivery = this.detail$s[i].next(list[i]);
-      if (delivery !== Task.resolved) {
+      if (!delivery.done) {
         deliveries.push(delivery);
       }
     }
@@ -59,14 +59,14 @@ function next<T, U>(this: OrderedParallelContext<T, U>, list: T[]) {
     this.detail$s.push(detail$);
     this.output.push(this.xf(detail$));
     const delivery = detail$.next(list[i]);
-    if (delivery !== Task.resolved) {
+    if (!delivery.done) {
       deliveries.push(delivery);
     }
   }
   for (let i = list.length, l = this.output.length; i < l; i++) {
     needsToPushOutput = true;
     const delivery = this.detail$s[i].complete();
-    if (delivery !== Task.resolved) {
+    if (!delivery.done) {
       deliveries.push(delivery);
     }
   }
@@ -75,7 +75,7 @@ function next<T, U>(this: OrderedParallelContext<T, U>, list: T[]) {
 
   if (needsToPushOutput) {
     const delivery = this.successive.next(this.output.slice(0));
-    if (delivery !== Task.resolved) {
+    if (!delivery.done) {
       deliveries.push(delivery);
     }
   }
@@ -87,13 +87,13 @@ function complete<T, U>(this: OrderedParallelContext<T, U>) {
   const deliveries: Task<void>[] = [];
   for (let i = 0, l = this.detail$s.length; i < l; i++) {
     const delivery = this.detail$s[i].complete();
-    if (delivery !== Task.resolved) {
+    if (!delivery.done) {
       deliveries.push(delivery);
     }
   }
   {
     const delivery = this.successive.complete();
-    if (delivery !== Task.resolved) {
+    if (!delivery.done) {
       deliveries.push(delivery);
     }
   }

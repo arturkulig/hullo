@@ -1,18 +1,19 @@
 import { Observable, IObserver, IObservable, Subscription } from "./Observable";
-import { Task, Execution } from "../Task";
+import { Task } from "../Task";
+import { schedule } from "../Task/schedule";
 
 type StateWideContext<T> = {
   initial: T;
   last?: T;
   sourceSub: Subscription | undefined;
   source: IObservable<T>;
-  successive: IObserver<T>[];
-  initialSending: Execution[];
+  clients: StateContext<T>[] | undefined;
 };
 
 interface StateContext<T> {
   wide: StateWideContext<T>;
   observer: IObserver<T> | undefined;
+  initialValueScheduled: boolean;
 }
 
 export class State<T> extends Observable<
@@ -25,8 +26,7 @@ export class State<T> extends Observable<
       initial,
       source,
       sourceSub: undefined,
-      successive: [],
-      initialSending: []
+      clients: undefined
     });
   }
 
@@ -41,16 +41,19 @@ export class State<T> extends Observable<
 function subjectContext<T>(arg: StateWideContext<T>): StateContext<T> {
   return {
     wide: arg,
-    observer: undefined
+    observer: undefined,
+    initialValueScheduled: true
   };
 }
 
 function subjectProduce<T>(this: StateContext<T>, observer: IObserver<T>) {
   this.observer = observer;
-  this.wide.successive.push(observer);
-  this.wide.initialSending.push(
-    Task.resolved.run<typeof this>(sendInitial, this)
-  );
+  if (this.wide.clients == undefined) {
+    this.wide.clients = [];
+  }
+  this.wide.clients.push(this);
+  schedule<void, StateContext<T>>(sendInitial, this);
+
   this.wide.sourceSub =
     this.wide.sourceSub ||
     this.wide.source.subscribe(new BroadcastObserver(this.wide));
@@ -58,8 +61,9 @@ function subjectProduce<T>(this: StateContext<T>, observer: IObserver<T>) {
 }
 
 function sendInitial<T>(this: StateContext<T>) {
-  if (this.observer) {
-    this.observer.next(
+  if (this.initialValueScheduled) {
+    this.initialValueScheduled = false;
+    this.observer!.next(
       "last" in this.wide ? this.wide.last! : this.wide.initial
     );
   }
@@ -69,36 +73,37 @@ function subjectCancel<T>(this: StateContext<T>) {
   if (!this.observer) {
     return;
   }
-  const pos = this.wide.successive.indexOf(this.observer);
-  if (pos >= 0) {
-    this.wide.successive.splice(pos, 1);
-    if (this.wide.successive.length === 0) {
-      const { sourceSub } = this.wide;
-      this.wide.sourceSub = undefined;
-      if (sourceSub && !sourceSub.closed) {
-        sourceSub.cancel();
+  if (this.wide.clients != undefined) {
+    const pos = this.wide.clients.indexOf(this);
+    if (pos >= 0) {
+      this.wide.clients.splice(pos, 1);
+      if (this.wide.clients.length === 0) {
+        const { sourceSub } = this.wide;
+        this.wide.sourceSub = undefined;
+        if (sourceSub && !sourceSub.closed) {
+          sourceSub.cancel();
+        }
       }
     }
   }
 }
 
 class BroadcastObserver<T> implements IObserver<T, BroadcastObserver<T>> {
-  constructor(private _wide: StateWideContext<T>) {}
+  constructor(private _wideContext: StateWideContext<T>) {}
 
   next(value: T) {
-    this._wide.last = value;
-    const initialSending = this._wide.initialSending.splice(0);
-    for (let i = 0, l = initialSending.length; i < l; i++) {
-      if (!initialSending[i].closed) {
-        initialSending[i].cancel();
-      }
-    }
+    this._wideContext.last = value;
     const deliveries: Task<void>[] = [];
-    const { successive: observers } = this._wide;
-    for (let i = 0, l = observers.length; i < l; i++) {
-      const delivery = observers[i].next(value);
-      if (delivery !== Task.resolved) {
-        deliveries.push(delivery);
+    const { clients } = this._wideContext;
+    if (clients != undefined) {
+      for (let i = 0, l = clients.length; i < l; i++) {
+        clients[i].initialValueScheduled = false;
+      }
+      for (let i = 0, l = clients.length; i < l; i++) {
+        const delivery = clients[i].observer!.next(value);
+        if (delivery !== Task.resolved) {
+          deliveries.push(delivery);
+        }
       }
     }
     return deliveries.length ? Task.all(deliveries) : Task.resolved;
@@ -106,11 +111,14 @@ class BroadcastObserver<T> implements IObserver<T, BroadcastObserver<T>> {
 
   complete() {
     const deliveries: Task<void>[] = [];
-    const { successive: observers } = this._wide;
-    for (let i = 0, l = observers.length; i < l; i++) {
-      const delivery = observers[i].complete();
-      if (delivery !== Task.resolved) {
-        deliveries.push(delivery);
+    const { clients } = this._wideContext;
+    this._wideContext.clients = undefined;
+    if (clients != undefined) {
+      for (let i = 0, l = clients.length; i < l; i++) {
+        const delivery = clients[i].observer!.complete();
+        if (delivery !== Task.resolved) {
+          deliveries.push(delivery);
+        }
       }
     }
     return deliveries.length ? Task.all(deliveries) : Task.resolved;

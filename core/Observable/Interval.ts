@@ -29,9 +29,7 @@ function intervalProducer(this: IntervalContext, observer: IObserver<number>) {
 }
 
 function intervalTrigger(ctx: IntervalContext) {
-  if (ctx.observer) {
-    ctx.observer.next(Date.now()).run(intervalFollow, ctx);
-  }
+  ctx.observer!.next(Date.now()).run(intervalFollow, ctx);
 }
 
 function intervalFollow(this: IntervalContext) {

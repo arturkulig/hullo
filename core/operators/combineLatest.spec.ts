@@ -54,7 +54,8 @@ describe("combineLatest", () => {
         results.push(completion);
       }
     });
-    await new Promise(r => setTimeout(r, 100));
+
+    await new Promise(r => setTimeout(r, 1000));
 
     expect(results).toEqual([[0, 2, 3], [1, 2, 3], [1, 22, 3], completion]);
     sub.cancel();
