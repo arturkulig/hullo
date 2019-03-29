@@ -23,6 +23,8 @@ describe("State", () => {
       }
     });
 
+    await timeout(100);
+
     Observable.of([1, 2, 4, 6]).subscribe(remoteObserver);
 
     await timeout(100);

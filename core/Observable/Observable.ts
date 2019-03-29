@@ -8,115 +8,13 @@ enum Stage {
 
 interface Observation<T, ExecutionContext, ObserverContext> {
   stage: Stage;
-  sending: Frame<T, ExecutionContext, ObserverContext> | undefined;
+  sending?: Promise<any>;
 
   cancel?: Cancellation<ExecutionContext>;
   exeContext: ExecutionContext;
 
   observer: PartialObserver<T, ObserverContext>;
   observerContext: ObserverContext;
-}
-
-enum DispatchType {
-  message,
-  completion,
-  cancellation
-}
-
-interface Ack {
-  (v: void): any;
-}
-
-type Frame<T, ExecutionContext, ObserverContext> = {
-  delivered: boolean;
-  observation: Observation<T, ExecutionContext, ObserverContext>;
-} & (
-  | {
-      type: DispatchType.message;
-      value: T;
-      deliveryAck: Ack;
-    }
-  | {
-      type: DispatchType.completion;
-      deliveryAck: Ack;
-    }
-  | {
-      type: DispatchType.cancellation;
-    });
-
-let runScheduled = false;
-let running = false;
-let queue: Frame<any, any, any>[] = [];
-
-function run() {
-  if (runScheduled) {
-    return;
-  }
-  runScheduled = true;
-  Promise.resolve().then(dispatch);
-}
-
-function dispatch() {
-  // debugger;
-  runScheduled = false;
-  if (running) {
-    return;
-  }
-  running = true;
-  const buffer: Frame<any, any, any>[] = [];
-  for (let i = 0; i < queue.length; i++) {
-    const frame = queue[i];
-    if (frame.observation.stage !== Stage.active) {
-      // debugger;
-      continue;
-    }
-    if (frame.observation.sending) {
-      // debugger;
-      buffer.push(frame);
-    } else {
-      frame.observation.sending = frame;
-      switch (frame.type) {
-        case DispatchType.message:
-          // debugger;
-          const nextAck: Promise<any> =
-            (frame.observation.observer.next &&
-              frame.observation.observer.next.call(
-                frame.observation.observerContext,
-                frame.value
-              )) ||
-            Promise.resolve();
-          nextAck.then(() => {
-            frameDeliveryConfirm(frame);
-          });
-          break;
-
-        case DispatchType.completion:
-          // debugger;
-          const completeAck: Promise<any> =
-            (frame.observation.observer.complete &&
-              frame.observation.observer.complete.call(
-                frame.observation.observerContext
-              )) ||
-            Promise.resolve();
-          completeAck.then(() => {
-            frameDeliveryConfirm(frame);
-          });
-          break;
-
-        case DispatchType.cancellation:
-          frame.delivered = true;
-          frame.observation.stage = Stage.cancelled;
-          if (frame.observation.cancel) {
-            frame.observation.cancel.call(frame.observation.exeContext);
-          }
-          frame.observation.sending = undefined;
-          // debugger;
-          break;
-      }
-    }
-  }
-  queue = buffer;
-  running = false;
 }
 
 export const observableSymbol = Symbol("is Observable");
@@ -225,7 +123,6 @@ export class Observable<T, ExecutionContext = any, ExeArg = any>
 
     const observation: Observation<T, ExecutionContext, ObserverContext> = {
       stage: Stage.active,
-      sending: undefined,
       observer,
       observerContext: (observerContext || observer) as ObserverContext,
       exeContext
@@ -268,13 +165,14 @@ class ObservableSubscription<T, ExecutionContext, ObserverContext>
   ) {}
 
   cancel() {
-    const frame: Frame<T, ExecutionContext, ObserverContext> = {
-      type: DispatchType.cancellation,
-      observation: this._observation,
-      delivered: true
-    };
-    queue.push(frame);
-    run();
+    this._observation.stage = Stage.cancelled;
+    const cancel = this._observation.cancel;
+    const exeContext = this._observation.exeContext;
+    if (cancel) {
+      (this._observation.sending || Promise.resolve()).then(() => {
+        cancel.call(exeContext);
+      });
+    }
   }
 }
 
@@ -284,59 +182,51 @@ class Observer<T, ExecutionContext, ObserverContext>
     private _observation: Observation<T, ExecutionContext, ObserverContext>
   ) {}
 
-  next(value: T) {
-    if (!this._observation.observer.next) {
+  next(value: T): Promise<any> {
+    const { stage, observer, observerContext, sending } = this._observation;
+
+    if (stage !== Stage.active || !observer.next) {
       return Promise.resolve();
     }
     // debugger;
 
-    return new Promise<void>(r => {
-      const frame: Frame<T, ExecutionContext, ObserverContext> = {
-        type: DispatchType.message,
-        observation: this._observation,
-        value,
-        delivered: false,
-        deliveryAck: r
-      };
-      // debugger;
-
-      queue.push(frame);
-      run();
-    });
-  }
-
-  complete() {
-    if (!this._observation.observer.complete) {
-      return Promise.resolve();
+    if (sending) {
+      return sending.then(() => {
+        this._observation.sending = undefined;
+        return this.next(value);
+      });
     }
 
-    return new Promise<void>(r => {
-      const frame: Frame<T, ExecutionContext, ObserverContext> = {
-        type: DispatchType.completion,
-        observation: this._observation,
-        delivered: false,
-        deliveryAck: r
-      };
-      // debugger;
+    const nextSending = observer.next.call(observerContext, value) || undefined;
 
-      queue.push(frame);
-      run();
-    });
+    this._observation.sending = nextSending;
+
+    return nextSending || Promise.resolve();
   }
-}
 
-function frameDeliveryConfirm<T, U, V>(frame: Frame<T, U, V>) {
-  if (
-    frame.type === DispatchType.completion ||
-    frame.type === DispatchType.message
-  ) {
-    frame.observation.sending = undefined;
-    frame.delivered = true;
-    frame.deliveryAck();
+  complete(): Promise<any> {
+    const { stage, observer, observerContext, sending } = this._observation;
+
+    if (stage !== Stage.active || !observer.complete) {
+      return Promise.resolve();
+    }
     // debugger;
-  }
 
-  run();
+    if (sending) {
+      return sending.then(() => {
+        this._observation.sending = undefined;
+        return this.complete();
+      });
+    }
+
+    this._observation.stage = Stage.completed;
+
+    const nextSending = observer.complete.call(observerContext) || undefined;
+
+    this._observation.sending = nextSending;
+
+    return nextSending || Promise.resolve();
+  }
 }
 
 // --
