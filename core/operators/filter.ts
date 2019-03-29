@@ -1,41 +1,70 @@
-import { Transducer } from "../Observable/Transducer";
-import { IObserver } from "../Observable";
+import {
+  Observable,
+  IObservable,
+  IObserver,
+  Subscription
+} from "../Observable";
 
-export function filter<T>(predicate: Predicate<T>): Filter<T> {
-  return {
-    predicate,
-    start,
-    next,
-    complete
+export function filter<T>(predicate: (v: T) => boolean) {
+  return function filterI(source: IObservable<T>) {
+    return new Observable<T>(filterProducer, filterContext, {
+      predicate,
+      source
+    });
   };
 }
 
-interface Predicate<T> {
-  (value: T): boolean;
+interface FilterArg<T> {
+  predicate: (v: T) => boolean;
+  source: IObservable<T>;
 }
 
-interface Filter<T> extends Transducer<T, T, FilterCtx<T>> {
-  predicate: Predicate<T>;
+interface FilterContext<T> {
+  predicate: (v: T) => boolean;
+  source: IObservable<T>;
+  sub: Subscription | undefined;
 }
 
-interface FilterCtx<T> {
-  predicate: Predicate<T>;
-  successive: IObserver<T>;
+interface FilterSubContext<T> {
+  predicate: (v: T) => boolean;
+  observer: IObserver<T>;
 }
 
-function start<T>(this: Filter<T>, successive: IObserver<T>): FilterCtx<T> {
+function filterContext<T>(arg: FilterArg<T>): FilterContext<T> {
   return {
-    successive,
-    predicate: this.predicate
+    predicate: arg.predicate,
+    source: arg.source,
+    sub: undefined
   };
 }
 
-function next<T>(this: FilterCtx<T>, value: T) {
-  return this.predicate(value)
-    ? this.successive.next(value)
-    : Promise.resolve();
+function filterProducer<T>(this: FilterContext<T>, observer: IObserver<T>) {
+  this.sub = this.source.subscribe(
+    {
+      next: filterNext,
+      complete: filterComplete
+    },
+    {
+      predicate: this.predicate,
+      observer
+    }
+  );
+
+  return filterCancel;
 }
 
-function complete<T>(this: FilterCtx<T>) {
-  return this.successive.complete();
+function filterCancel<T>(this: FilterContext<T>) {
+  if (this.sub && !this.sub.closed) {
+    this.sub.cancel();
+  }
+}
+
+function filterNext<T>(this: FilterSubContext<T>, value: T) {
+  if (this.predicate(value)) {
+    return this.observer.next(value);
+  }
+}
+
+function filterComplete<T>(this: FilterSubContext<T>) {
+  return this.observer.complete();
 }

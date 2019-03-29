@@ -1,15 +1,21 @@
-import { Transducer, IObserver, IObservable, Atom } from "../Observable";
+import {
+  IObserver,
+  IObservable,
+  Atom,
+  Observable,
+  Subscription
+} from "../Observable";
 
 export function parallelizeByKey<T, U>(
   xf: TrackTransform<T, U>,
   identity: TrackIdentity<T>
-): KeyedParallel<T, U> {
-  return {
-    xf,
-    identity,
-    start,
-    next,
-    complete
+) {
+  return function parallelizeByKeyI(source: IObservable<T[]>) {
+    return new Observable<U[]>(parallelizeBKProducer, parallelizeBKContext, {
+      xf,
+      identity,
+      source
+    });
   };
 }
 
@@ -21,35 +27,60 @@ interface TrackIdentity<T> {
   (value: T): string;
 }
 
-interface KeyedParallel<T, U>
-  extends Transducer<T[], U[], KeyedParallelContext<T, U>> {
+interface KeyedParallelArg<T, U> {
   xf: TrackTransform<T, U>;
   identity: TrackIdentity<T>;
+  source: IObservable<T[]>;
 }
 
 interface KeyedParallelContext<T, U> {
+  observer: IObserver<U[]> | undefined;
+  sub: Subscription | undefined;
   xf: TrackTransform<T, U>;
   identity: TrackIdentity<T>;
-  successive: IObserver<U[]>;
+  source: IObservable<T[]>;
   detail$s: Atom<T>[];
   keys: string[];
   lastInput: T[];
   output: U[];
 }
 
-function start<T, U>(
-  this: KeyedParallel<T, U>,
-  successive: IObserver<U[]>
+function parallelizeBKContext<T, U>(
+  arg: KeyedParallelArg<T, U>
 ): KeyedParallelContext<T, U> {
   return {
-    successive,
-    xf: this.xf,
-    identity: this.identity,
+    observer: undefined,
+    sub: undefined,
+    xf: arg.xf,
+    source: arg.source,
+    identity: arg.identity,
     detail$s: [],
     output: [],
     lastInput: [],
     keys: []
   };
+}
+
+function parallelizeBKProducer<T, U>(
+  this: KeyedParallelContext<T, U>,
+  observer: IObserver<U[]>
+) {
+  this.observer = observer;
+  this.sub = this.source.subscribe(
+    {
+      next,
+      complete
+    },
+    this
+  );
+
+  return parallelizeBKCancel;
+}
+
+function parallelizeBKCancel<T, U>(this: KeyedParallelContext<T, U>) {
+  if (this.sub && !this.sub.closed) {
+    this.sub.cancel();
+  }
 }
 
 function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
@@ -97,8 +128,8 @@ function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
       }
     }
 
-  if (itemsMoved || itemsCreated || itemsRemoved) {
-    const delivery = this.successive.next(nextOutput.slice(0));
+  if (this.observer && (itemsMoved || itemsCreated || itemsRemoved)) {
+    const delivery = this.observer.next(nextOutput.slice(0));
     deliveries.push(delivery);
   }
 
@@ -111,13 +142,16 @@ function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
 }
 
 function complete<T, U>(this: KeyedParallelContext<T, U>) {
+  if (!this.observer) {
+    return;
+  }
   const deliveries: Promise<void>[] = [];
   for (let i = 0, l = this.detail$s.length; i < l; i++) {
     const delivery = this.detail$s[i].complete();
     deliveries.push(delivery);
   }
   {
-    const delivery = this.successive.complete();
+    const delivery = this.observer.complete();
     deliveries.push(delivery);
   }
   return Promise.all(deliveries);

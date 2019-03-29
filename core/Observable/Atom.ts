@@ -1,6 +1,6 @@
 import { Duplex } from "./Duplex";
 import { IObserver, Observable } from "./Observable";
-import { State } from "./State";
+import { state } from "../operators/state";
 
 interface AtomWideContext<T> {
   remote: IObserver<T> | undefined;
@@ -14,24 +14,17 @@ interface AtomContext<T> {
 export class Atom<T> extends Duplex<T, T, IObserver<T>> {
   constructor(initial: T) {
     const wide: AtomWideContext<T> = { remote: undefined };
-    const observable = new State<T>(
-      new Observable<T, AtomContext<T>, AtomWideContext<T>>(
-        atomProduce,
-        atomContext,
-        wide
-      ),
-      initial
-    );
+    const observable = new Observable<T, AtomContext<T>, AtomWideContext<T>>(
+      atomProduce,
+      atomContext,
+      wide
+    ).pipe(state(initial));
     const observer = new AtomObserver(wide);
     super(observable, observer);
   }
 
   valueOf(): T {
-    const source: unknown = this._observable;
-    if (source instanceof State) {
-      return (source as State<T>).valueOf();
-    }
-    throw new Error();
+    return (this._observable.valueOf() as unknown) as T;
   }
 }
 

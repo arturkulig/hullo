@@ -1,42 +1,65 @@
-import { Transducer } from "../Observable/Transducer";
-import { IObserver } from "../Observable";
+import {
+  Observable,
+  IObservable,
+  IObserver,
+  Subscription
+} from "../Observable";
 
-export function map<T, U>(xf: Transform<T, U>): Map<T, U> {
-  return {
-    xf,
-    start,
-    next,
-    complete
+export function map<T, U>(xf: (v: T) => U) {
+  return function mapI(source: IObservable<T>) {
+    return new Observable<U>(mapProducer, mapContext, { xf, source });
   };
 }
 
-interface Transform<T, U> {
-  (value: T): U;
-}
-
-interface Map<T, U> extends Transducer<T, U, MapContext<T, U>> {
-  xf: Transform<T, U>;
+interface MapArg<T, U> {
+  xf: (v: T) => U;
+  source: IObservable<T>;
 }
 
 interface MapContext<T, U> {
-  xf: Transform<T, U>;
-  successive: IObserver<U>;
+  xf: (v: T) => U;
+  source: IObservable<T>;
+  sub: Subscription | undefined;
 }
 
-function start<T, U>(
-  this: Map<T, U>,
-  successive: IObserver<U>
-): MapContext<T, U> {
+interface MapSubContext<T, U> {
+  xf: (v: T) => U;
+  observer: IObserver<U>;
+}
+
+function mapContext<T, U>(arg: MapArg<T, U>): MapContext<T, U> {
   return {
-    successive,
-    xf: this.xf
+    xf: arg.xf,
+    source: arg.source,
+    sub: undefined
   };
 }
 
-function next<T, U>(this: MapContext<T, U>, value: T) {
-  return this.successive.next(this.xf(value));
+function mapProducer<T, U>(this: MapContext<T, U>, observer: IObserver<U>) {
+  this.sub = this.source.subscribe(
+    {
+      next: mapNext,
+      complete: mapComplete
+    },
+    {
+      xf: this.xf,
+      observer
+    }
+  );
+
+  return mapCancel;
 }
 
-function complete<T, U>(this: MapContext<T, U>) {
-  return this.successive.complete();
+function mapCancel<T, U>(this: MapContext<T, U>) {
+  if (this.sub && !this.sub.closed) {
+    this.sub.cancel();
+  }
+}
+
+function mapNext<T, U>(this: MapSubContext<T, U>, value: T) {
+  return this.observer.next(this.xf(value));
+}
+
+function mapComplete<T, U>(this: MapSubContext<T, U>) {
+  return this.observer.complete();
 }

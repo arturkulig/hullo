@@ -19,7 +19,7 @@ describe("distinct", () => {
   it("sloppy equal", async () => {
     const results: (number | string)[] = [];
     Observable.of([1, 3, "3", 4, 3, 3, 10])
-      .pipe(distinctEqual())
+      .pipe(distinctEqual)
       .subscribe({
         next: v => {
           results.push(v);
@@ -32,7 +32,7 @@ describe("distinct", () => {
   it("strict equal", async () => {
     const results: (number | string)[] = [];
     Observable.of([1, 3, "3", 4, 3, 3, 10])
-      .pipe(distinctStrictEqual())
+      .pipe(distinctStrictEqual)
       .subscribe({
         next: v => {
           results.push(v);

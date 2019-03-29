@@ -1,74 +1,96 @@
-import { Transducer } from "../Observable/Transducer";
-import { IObserver } from "../Observable";
+import {
+  Observable,
+  IObservable,
+  IObserver,
+  Subscription
+} from "../Observable";
 
-export function distinct<T>(predicate: Comparator<T>): Distinct<T> {
-  return {
-    predicate,
-    start,
-    next,
-    complete
+export function distinctEqual<T>(source: IObservable<T>) {
+  return new Observable<T>(distinctProducer, distinctContext, {
+    compare: equal,
+    source
+  });
+}
+
+function equal<T>(p: T, n: T) {
+  return p != n;
+}
+
+export function distinctStrictEqual<T>(source: IObservable<T>) {
+  return new Observable<T>(distinctProducer, distinctContext, {
+    compare: strictEqual,
+    source
+  });
+}
+
+function strictEqual<T>(p: T, n: T) {
+  return p !== n;
+}
+
+export function distinct<T>(compare: (prev: T, next: T) => boolean) {
+  return function distinctI(source: IObservable<T>) {
+    return new Observable<T>(distinctProducer, distinctContext, {
+      compare,
+      source
+    });
   };
 }
 
-export function distinctEqual<T>(): Distinct<T> {
-  return _distinctEqual;
+interface DistinctArg<T> {
+  compare: (prev: T, next: T) => boolean;
+  source: IObservable<T>;
 }
 
-const _distinctEqual = {
-  predicate: equal,
-  start,
-  next,
-  complete
-};
-
-function equal<T>(v1: T, v2: T): boolean {
-  return v1 != v2;
+interface DistinctContext<T> {
+  compare: (prev: T, next: T) => boolean;
+  source: IObservable<T>;
+  sub: Subscription | undefined;
 }
 
-export function distinctStrictEqual<T>(): Distinct<T> {
-  return _distinctStrictEqual;
-}
-
-const _distinctStrictEqual = {
-  predicate: strictEqual,
-  start,
-  next,
-  complete
-};
-
-function strictEqual<T>(v1: T, v2: T): boolean {
-  return v1 !== v2;
-}
-
-interface Comparator<T> {
-  (value: T, prev: T): boolean;
-}
-
-interface Distinct<T> extends Transducer<T, T, DistinctCtx<T>> {
-  predicate: Comparator<T>;
-}
-
-interface DistinctCtx<T> {
+interface DistinctSubContext<T> {
+  hasLast: boolean;
   last?: T;
-  predicate: Comparator<T>;
-  successive: IObserver<T>;
+  compare: (prev: T, next: T) => boolean;
+  observer: IObserver<T>;
 }
 
-function start<T>(this: Distinct<T>, successive: IObserver<T>): DistinctCtx<T> {
+function distinctContext<T>(arg: DistinctArg<T>): DistinctContext<T> {
   return {
-    successive,
-    predicate: this.predicate
+    compare: arg.compare,
+    source: arg.source,
+    sub: undefined
   };
 }
 
-function next<T>(this: DistinctCtx<T>, value: T) {
-  if ("last" in this && !this.predicate(value, this.last!)) {
-    return Promise.resolve();
-  }
-  this.last = value;
-  return this.successive.next(value);
+function distinctProducer<T>(this: DistinctContext<T>, observer: IObserver<T>) {
+  this.sub = this.source.subscribe(
+    {
+      next: distinctNext,
+      complete: distinctComplete
+    },
+    {
+      compare: this.compare,
+      observer
+    }
+  );
+
+  return distinctCancel;
 }
 
-function complete<T>(this: DistinctCtx<T>) {
-  return this.successive.complete();
+function distinctCancel<T>(this: DistinctContext<T>) {
+  if (this.sub && !this.sub.closed) {
+    this.sub.cancel();
+  }
+}
+
+function distinctNext<T>(this: DistinctSubContext<T>, value: T) {
+  if (!this.hasLast || this.compare(this.last!, value)) {
+    this.hasLast = true;
+    this.last = value;
+    return this.observer.next(value);
+  }
+}
+
+function distinctComplete<T>(this: DistinctSubContext<T>) {
+  return this.observer.complete();
 }

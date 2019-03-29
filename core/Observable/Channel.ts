@@ -1,6 +1,6 @@
 import { Duplex } from "./Duplex";
 import { IObserver, Observable } from "./Observable";
-import { Subject } from "./Subject";
+import { subject } from "../operators/subject";
 
 interface ChannelWideContext<T> {
   remote: IObserver<T> | undefined;
@@ -14,13 +14,11 @@ interface ChannelContext<T> {
 export class Channel<T> extends Duplex<T, T, IObserver<T>> {
   constructor() {
     const wide: ChannelWideContext<T> = { remote: undefined };
-    const observable = new Subject<T>(
-      new Observable<T, ChannelContext<T>, ChannelWideContext<T>>(
-        channelProduce,
-        channelContext,
-        wide
-      )
-    );
+    const observable = new Observable<
+      T,
+      ChannelContext<T>,
+      ChannelWideContext<T>
+    >(channelProduce, channelContext, wide).pipe(subject);
     const observer = new ChannelObserver(wide);
     super(observable, observer);
   }

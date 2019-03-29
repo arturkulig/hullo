@@ -1,4 +1,9 @@
-import { Observable, IObserver, IObservable, Subscription } from "./Observable";
+import {
+  Observable,
+  IObserver,
+  IObservable,
+  Subscription
+} from "../Observable/Observable";
 
 type SubjectWideContext<T> = {
   sourceSub: Subscription | undefined;
@@ -11,18 +16,12 @@ interface SubjectContext<T> {
   observer: IObserver<T> | undefined;
 }
 
-export class Subject<T> extends Observable<
-  T,
-  SubjectContext<T>,
-  SubjectWideContext<T>
-> {
-  constructor(_source: IObservable<T>) {
-    super(subjectProduce, subjectContext, {
-      source: _source,
-      sourceSub: undefined,
-      observers: []
-    });
-  }
+export function subject<T>(source: IObservable<T>) {
+  return new Observable<T>(subjectProduce, subjectContext, {
+    source,
+    sourceSub: undefined,
+    observers: []
+  });
 }
 
 function subjectContext<T>(arg: SubjectWideContext<T>): SubjectContext<T> {

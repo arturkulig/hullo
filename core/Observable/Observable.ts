@@ -1,5 +1,3 @@
-import { Transducer } from "./Transducer";
-
 enum Stage {
   active,
   completed,
@@ -44,18 +42,14 @@ export interface IObservable<T> {
     observer: PartialObserver<T, ObserverContext>,
     observerContext?: ObserverContext
   ): Subscription;
-  pipe<U>(transducer: Transducer<T, U, any>): IObservable<U>;
+  pipe<U>(transducer: (it: IObservable<T>) => IObservable<U>): IObservable<U>;
 }
 interface Producer<T, ExecutionContext> {
-  (this: ExecutionContext, observer: IObserver<T>): void | Cancellation<
-    ExecutionContext
-  >;
+  (this: ExecutionContext, observer: IObserver<T>):
+    | void
+    | Cancellation<ExecutionContext>
+    | Promise<any>;
 }
-type Pipeline<IN, OUT, X = any> = {
-  through:
-    | Transducer<IN, OUT, any>
-    | [Pipeline<IN, X>, Transducer<X, OUT, any>];
-};
 
 export class Observable<T, ExecutionContext = any, ExeArg = any>
   implements IObservable<T> {
@@ -135,20 +129,15 @@ export class Observable<T, ExecutionContext = any, ExeArg = any>
       new Observer(observation)
     );
 
-    if (cancel) {
+    if (typeof cancel === "function") {
       observation.cancel = cancel;
     }
 
     return exe;
   }
 
-  pipe<U>(transducer: Transducer<T, U, any>): IObservable<U> {
-    return new PipingObservable(
-      { through: transducer },
-      this._produce,
-      this._getContext!,
-      this._arg!
-    );
+  pipe<U>(transducer: (it: IObservable<T>) => IObservable<U>): IObservable<U> {
+    return transducer(this);
   }
 }
 
@@ -226,149 +215,6 @@ class Observer<T, ExecutionContext, ObserverContext>
     this._observation.sending = nextSending;
 
     return nextSending || Promise.resolve();
-  }
-}
-
-// --
-
-interface PipingArgument<T, U, ExecutionContext, ExeArg> {
-  produce: Producer<T, ExecutionContext>;
-  getContext?: (arg: ExeArg) => ExecutionContext;
-  arg?: ExeArg;
-  pipeline: Pipeline<T, U>;
-}
-
-interface PipingContext<T, U, ExecutionContext, ExeArg>
-  extends PipingArgument<T, U, ExecutionContext, ExeArg> {
-  pipes?: PipingObserver<any, any, any>[];
-  exeCtx?: ExecutionContext;
-  cancel?: Cancellation<ExecutionContext>;
-}
-
-class PipingObservable<T, U, ExecutionContext, ExeArg> extends Observable<
-  U,
-  PipingContext<T, U, ExecutionContext, ExeArg>,
-  PipingArgument<T, U, ExecutionContext, ExeArg>
-> {
-  constructor(
-    pipeline: Pipeline<T, U>,
-    produce: Producer<T, ExecutionContext>,
-    getContext: (arg: ExeArg) => ExecutionContext,
-    arg: ExeArg
-  );
-  constructor(pipeline: Pipeline<T, U>, produce: Producer<T, any>);
-  constructor(
-    protected _ogPipeline: Pipeline<T, U>,
-    protected _ogProduce: Producer<T, ExecutionContext>,
-    protected _ogGetContext?: (arg: ExeArg) => ExecutionContext,
-    protected _ogArg?: ExeArg
-  ) {
-    super(pipingProduce, pipingContext, {
-      produce: _ogProduce,
-      getContext: _ogGetContext,
-      arg: _ogArg,
-      pipeline: _ogPipeline
-    });
-  }
-
-  pipe<Y>(transducer: Transducer<U, Y, any>): IObservable<Y> {
-    return new PipingObservable<T, Y, ExecutionContext, ExeArg>(
-      { through: [this._ogPipeline, transducer] },
-      this._ogProduce,
-      this._ogGetContext!,
-      this._ogArg!
-    );
-  }
-}
-
-function pipingContext<T, U, ExecutionContext, ExeArg>(
-  arg: PipingArgument<T, U, ExecutionContext, ExeArg>
-): PipingContext<T, U, ExecutionContext, ExeArg> {
-  return arg;
-}
-
-function pipingProduce<T, U, ExecutionContext, ExeArg>(
-  this: PipingContext<T, U, ExecutionContext, ExeArg>,
-  observer: SkippingObserver<U>
-) {
-  this.exeCtx = this.getContext
-    ? this.getContext(this.arg!)
-    : ((undefined as any) as ExecutionContext);
-  const [pipes, po] = pipeObservers(this.pipeline, observer);
-  this.pipes = pipes;
-  const cancel = this.produce.call(this.exeCtx, new PipingObserverAdapter(po));
-  if (cancel) {
-    this.cancel = cancel;
-  }
-  return pipingCancel;
-}
-
-function pipeObservers<T, U, X>(
-  pipeline: Pipeline<T, U, X>,
-  innerObserver: SkippingObserver<U>
-): [
-  [PipingObserver<any, U, any>, ...PipingObserver<any, any, any>[]],
-  PipingObserver<T, any, any>
-] {
-  const { through } = pipeline;
-  if (Array.isArray(through)) {
-    const [nextPipe, xf] = through;
-    const po = new PipingObserver(xf, innerObserver);
-    const [all, outerObserver] = pipeObservers(nextPipe, po);
-    return [[po, ...all], outerObserver];
-  } else {
-    const po = new PipingObserver<T, U, any>(through, innerObserver);
-    return [[po], po];
-  }
-}
-
-function pipingCancel<T, U, ExecutionContext, ExeArg>(
-  this: PipingContext<T, U, ExecutionContext, ExeArg>
-) {
-  if (this.cancel) {
-    this.cancel.call(this.exeCtx!);
-  }
-  if (this.pipes) {
-    for (const pipe of this.pipes) {
-      pipe.cancel();
-    }
-  }
-}
-
-class PipingObserverAdapter<T, U, XdCtx> implements IObserver<T, XdCtx> {
-  constructor(private _observer: PipingObserver<T, U, XdCtx>) {}
-
-  next(value: T) {
-    return this._observer.next(value) || Promise.resolve();
-  }
-
-  complete() {
-    return this._observer.complete() || Promise.resolve();
-  }
-}
-
-class PipingObserver<T, U, XdCtx> implements SkippingObserver<T, XdCtx> {
-  exeCtx: XdCtx;
-
-  constructor(
-    private _xt: Transducer<T, U, XdCtx>,
-    _observer: SkippingObserver<U>
-  ) {
-    this.exeCtx = this._xt.start(_observer);
-  }
-
-  next(value: T) {
-    return this._xt.next.call(this.exeCtx, value);
-  }
-
-  complete() {
-    return this._xt.complete.call(this.exeCtx);
-  }
-
-  cancel() {
-    if (this._xt && this._xt.cancel) {
-      this._xt.cancel.call(this.exeCtx);
-    }
   }
 }
 

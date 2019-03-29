@@ -1,4 +1,9 @@
-import { Observable, IObserver, IObservable, Subscription } from "./Observable";
+import {
+  Observable,
+  IObserver,
+  IObservable,
+  Subscription
+} from "../Observable";
 
 type StateWideContext<T> = {
   initial: T;
@@ -14,26 +19,27 @@ interface StateContext<T> {
   initialValueScheduled: boolean;
 }
 
-export class State<T> extends Observable<
-  T,
-  StateContext<T>,
-  StateWideContext<T>
-> {
-  constructor(source: IObservable<T>, initial: T) {
-    super(subjectProduce, subjectContext, {
+export function state<T>(initial: T) {
+  return function stateI(
+    source: IObservable<T>
+  ): IObservable<T> & { valueOf(): T } {
+    const wideContext: StateWideContext<T> = {
       initial,
       source,
       sourceSub: undefined,
       clients: undefined
-    });
-  }
-
-  valueOf(): T {
-    if (!this._arg) {
-      throw new Error();
-    }
-    return "last" in this._arg ? this._arg!.last! : this._arg.initial;
-  }
+    };
+    return Object.assign(
+      new Observable(subjectProduce, subjectContext, wideContext),
+      {
+        valueOf(): T {
+          return "last" in wideContext
+            ? wideContext!.last!
+            : wideContext.initial;
+        }
+      }
+    );
+  };
 }
 
 function subjectContext<T>(arg: StateWideContext<T>): StateContext<T> {

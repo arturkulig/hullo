@@ -2,10 +2,11 @@ import { html, HulloElement, mount } from "../../dom";
 import {
   Observable,
   Interval,
-  State,
   Atom,
   map,
-  combineLatest
+  state,
+  combineLatest,
+  IObservable
 } from "../../core";
 
 const rootElement = document.createElement("div");
@@ -49,12 +50,9 @@ function App() {
       x: 0,
       y: 0,
       size: 1000,
-      text: new State(
-        new Interval(1000).pipe(
-          map(t => Math.round(((t - startTime) / 1000) % 10).toString(10))
-        ),
-        "0"
-      )
+      text: new Interval(1000)
+        .pipe(map(t => Math.round(((t - startTime) / 1000) % 10).toString(10)))
+        .pipe(state("0"))
     })
   });
 }
@@ -63,7 +61,7 @@ function SierpinskiTriangle(props: {
   x: number;
   y: number;
   size: number;
-  text: Observable<string>;
+  text: IObservable<string>;
 }): HulloElement[] {
   if (props.size <= targetSize) {
     return [
@@ -101,7 +99,7 @@ function Dot(data: {
   x: number;
   y: number;
   size: number;
-  text: Observable<string>;
+  text: IObservable<string>;
 }) {
   const hover$ = new Atom(false);
 

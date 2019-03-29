@@ -8,7 +8,7 @@
     "clear": "./clean_up_after_build.sh",
     "check": "npm run clear; npm run index; tsc --noEmit",
     "dev": "npm run clear; npm run index; concurrently -i -n tsc,jest \"tsc --noEmit -w\" \"jest --watch\"",
-    "build": "npm run clear; npm run index; tsc",
+    "build": "npm run clear; npm run index; tsc --noEmit && jest && tsc",
     "prepublish": "npm run build",
     "test": "npm run clear; npm run index; jest"
   },

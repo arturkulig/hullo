@@ -1,13 +1,17 @@
-import { Transducer, IObserver, IObservable, Atom } from "../Observable";
+import {
+  IObserver,
+  IObservable,
+  Atom,
+  Observable,
+  Subscription
+} from "../Observable";
 
-export function parallelizeByOrder<T, U>(
-  xf: TrackTransform<T, U>
-): OrderedParallel<T, U> {
-  return {
-    xf,
-    start,
-    next,
-    complete
+export function parallelizeByOrder<T, U>(xf: TrackTransform<T, U>) {
+  return function parallelizeByOrderI(source: IObservable<T[]>) {
+    return new Observable<U[]>(parallelizeBOProducer, parallelizeBOContext, {
+      xf,
+      source
+    });
   };
 }
 
@@ -15,28 +19,57 @@ interface TrackTransform<T, U> {
   (value: IObservable<T>): U;
 }
 
-interface OrderedParallel<T, U>
-  extends Transducer<T[], U[], OrderedParallelContext<T, U>> {
+interface OrderedParallelArg<T, U> {
   xf: TrackTransform<T, U>;
+  source: IObservable<T[]>;
 }
 
 interface OrderedParallelContext<T, U> {
+  observer: IObserver<U[]> | undefined;
+  sub: Subscription | undefined;
   xf: TrackTransform<T, U>;
-  successive: IObserver<U[]>;
+  source: IObservable<T[]>;
   detail$s: Atom<T>[];
+  keys: string[];
+  lastInput: T[];
   output: U[];
 }
 
-function start<T, U>(
-  this: OrderedParallel<T, U>,
-  successive: IObserver<U[]>
+function parallelizeBOContext<T, U>(
+  arg: OrderedParallelArg<T, U>
 ): OrderedParallelContext<T, U> {
   return {
-    successive,
-    xf: this.xf,
+    observer: undefined,
+    sub: undefined,
+    xf: arg.xf,
+    source: arg.source,
     detail$s: [],
-    output: []
+    output: [],
+    lastInput: [],
+    keys: []
   };
+}
+
+function parallelizeBOProducer<T, U>(
+  this: OrderedParallelContext<T, U>,
+  observer: IObserver<U[]>
+) {
+  this.observer = observer;
+  this.sub = this.source.subscribe(
+    {
+      next,
+      complete
+    },
+    this
+  );
+
+  return parallelizeBOCancel;
+}
+
+function parallelizeBOCancel<T, U>(this: OrderedParallelContext<T, U>) {
+  if (this.sub && !this.sub.closed) {
+    this.sub.cancel();
+  }
 }
 
 function next<T, U>(this: OrderedParallelContext<T, U>, list: T[]) {
@@ -66,8 +99,8 @@ function next<T, U>(this: OrderedParallelContext<T, U>, list: T[]) {
   this.detail$s.splice(list.length);
   this.output.splice(list.length);
 
-  if (needsToPushOutput) {
-    const delivery = this.successive.next(this.output.slice(0));
+  if (needsToPushOutput && this.observer) {
+    const delivery = this.observer.next(this.output.slice(0));
     deliveries.push(delivery);
   }
 
@@ -75,14 +108,17 @@ function next<T, U>(this: OrderedParallelContext<T, U>, list: T[]) {
 }
 
 function complete<T, U>(this: OrderedParallelContext<T, U>) {
+  if (!this.observer) {
+    return;
+  }
   const deliveries: Promise<void>[] = [];
   for (let i = 0, l = this.detail$s.length; i < l; i++) {
     const delivery = this.detail$s[i].complete();
     deliveries.push(delivery);
   }
   {
-    const delivery = this.successive.complete();
+    const delivery = this.observer.complete();
     deliveries.push(delivery);
   }
-  return deliveries.length ? Promise.all(deliveries) : Promise.resolve();
+  return Promise.all(deliveries);
 }

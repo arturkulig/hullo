@@ -1,5 +1,5 @@
-import { IObserver, Observable } from "./Observable";
-import { State } from "./State";
+import { IObserver, Observable } from "../Observable/Observable";
+import { state } from "./state";
 import { timeout } from "../timeout";
 
 describe("State", () => {
@@ -8,16 +8,13 @@ describe("State", () => {
       next: _n => Promise.resolve(),
       complete: () => Promise.resolve()
     };
-    const state = new State(
-      new Observable<number>(observer => {
-        remoteObserver = observer;
-        return () => {};
-      }),
-      0
-    );
+    const s = new Observable<number>(observer => {
+      remoteObserver = observer;
+      return () => {};
+    }).pipe(state(0));
 
     const results: number[] = [];
-    state.subscribe({
+    s.subscribe({
       next: v => {
         results.push(v);
       }
@@ -33,25 +30,22 @@ describe("State", () => {
   });
 
   it("latter sub gets last value", async () => {
-    const state = new State(
-      new Observable<number>(observer => {
-        Observable.of([1, 2, 4, 6]).subscribe({
-          next(v) {
-            return observer.next(v);
-          }
-        });
-      }),
-      0
-    );
+    const s = new Observable<number>(observer => {
+      Observable.of([1, 2, 4, 6]).subscribe({
+        next(v) {
+          return observer.next(v);
+        }
+      });
+    }).pipe(state(0));
 
     // first sub
-    state.subscribe({});
+    s.subscribe({});
 
     await timeout(100);
 
     // latter sub
     const results: number[] = [];
-    state.subscribe({
+    s.subscribe({
       next: v => {
         results.push(v);
       }

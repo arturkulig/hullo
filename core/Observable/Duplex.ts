@@ -1,12 +1,10 @@
 import {
   observableSymbol,
-  Observable,
   Subscription,
   PartialObserver,
   IObserver,
   IObservable
 } from "./Observable";
-import { Transducer } from "./Transducer";
 
 const duplexSymbol = Symbol("is Duplex");
 
@@ -24,18 +22,18 @@ export class Duplex<IN, OUT, ObserverCtx>
   }
 
   constructor(
-    observable: Observable<OUT>,
+    observable: IObservable<OUT>,
     observer: ObserverCtx extends IObserver<IN>
       ? IObserver<IN, IObserver<IN>>
       : never
   );
   constructor(
-    observable: Observable<OUT>,
+    observable: IObservable<OUT>,
     observer: IObserver<IN, ObserverCtx>,
     observerContext: ObserverCtx
   );
   constructor(
-    protected _observable: Observable<OUT>,
+    protected _observable: IObservable<OUT>,
     protected _observer: IObserver<IN, ObserverCtx>,
     protected _observerContext: ObserverCtx = _observer as any
   ) {}
@@ -63,7 +61,7 @@ export class Duplex<IN, OUT, ObserverCtx>
     return this._observable.subscribe(observer, observerContext);
   }
 
-  pipe<U>(transducer: Transducer<OUT, U, any>): IObservable<U> {
+  pipe<U>(transducer: (v: IObservable<OUT>) => IObservable<U>): IObservable<U> {
     return this._observable.pipe(transducer);
   }
 }

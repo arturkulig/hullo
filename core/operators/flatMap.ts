@@ -1,72 +1,80 @@
-import { Transducer } from "../Observable";
-import { IObserver, IObservable, Subscription } from "../Observable";
+import {
+  Observable,
+  IObservable,
+  IObserver,
+  Subscription
+} from "../Observable";
 
-export function flatMap<T, U>(xt: Transform<T, U>): FlatMap<T, U> {
-  return {
-    xt,
-    start,
-    next,
-    complete,
-    cancel
+export function flatMap<T, U>(xf: (v: T) => IObservable<U>) {
+  return function flatMapI(source: IObservable<T>) {
+    return new Observable<U>(flatMapProducer, flatMapContext, { xf, source });
   };
 }
 
-interface Transform<T, U> {
-  (value: T): IObservable<U>;
-}
-
-interface FlatMap<T, U> extends Transducer<T, U, FlatMapContext<T, U>> {
-  xt: Transform<T, U>;
+interface FlatMapArg<T, U> {
+  xf: (v: T) => IObservable<U>;
+  source: IObservable<T>;
 }
 
 interface FlatMapContext<T, U> {
-  xt: Transform<T, U>;
-  successive: IObserver<U>;
-  subscriptions: Subscription[];
+  xf: (v: T) => IObservable<U>;
+  source: IObservable<T>;
+  sub: Subscription | undefined;
+  innerSub: Subscription | undefined;
 }
 
-function start<T, U>(
-  this: FlatMap<T, U>,
-  successive: IObserver<U>
-): FlatMapContext<T, U> {
+interface FlatMapSubContext<T, U> {
+  context: FlatMapContext<T, U>;
+  observer: IObserver<U>;
+}
+
+function flatMapContext<T, U>(arg: FlatMapArg<T, U>): FlatMapContext<T, U> {
   return {
-    successive,
-    xt: this.xt,
-    subscriptions: []
+    xf: arg.xf,
+    source: arg.source,
+    sub: undefined,
+    innerSub: undefined
   };
 }
 
-function next<T, U>(this: FlatMapContext<T, U>, outerValue: T) {
-  return new Promise<void>(r => {
-    this.subscriptions.push(
-      this.xt(outerValue).subscribe(new FlatMapObserver(this, r))
+function flatMapProducer<T, U>(
+  this: FlatMapContext<T, U>,
+  observer: IObserver<U>
+) {
+  const subCtx: FlatMapSubContext<T, U> = { observer, context: this };
+  this.sub = this.source.subscribe(
+    {
+      next: flatMapNext,
+      complete: flatMapComplete
+    },
+    subCtx
+  );
+
+  return flatMapCancel;
+}
+
+function flatMapCancel<T, U>(this: FlatMapContext<T, U>) {
+  if (this.sub && !this.sub.closed) {
+    this.sub.cancel();
+  }
+}
+
+function flatMapNext<T, U>(this: FlatMapSubContext<T, U>, value: T) {
+  return new Promise(r => {
+    this.context.innerSub = this.context.xf(value).subscribe(
+      {
+        next: flatMapInnerNext,
+        complete: r
+      },
+      this
     );
   });
 }
 
-class FlatMapObserver<T> {
-  constructor(
-    private _context: FlatMapContext<any, T>,
-    private _ack: (v: void) => any
-  ) {}
-
-  next(value: T) {
-    return this._context.successive.next(value);
-  }
-
-  complete() {
-    this._ack();
-  }
+function flatMapInnerNext<T, U>(this: FlatMapSubContext<T, U>, value: U) {
+  return this.observer.next(value);
 }
 
-function complete<T, U>(this: FlatMapContext<T, U>) {
-  return this.successive.complete();
-}
-
-function cancel<T, U>(this: FlatMapContext<T, U>) {
-  for (let i = 0, l = this.subscriptions.length; i < l; i++) {
-    if (!this.subscriptions[i].closed) {
-      this.subscriptions[i].cancel();
-    }
-  }
+function flatMapComplete<T, U>(this: FlatMapSubContext<T, U>) {
+  return this.observer.complete();
 }
