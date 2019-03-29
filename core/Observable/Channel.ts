@@ -1,6 +1,5 @@
 import { Duplex } from "./Duplex";
 import { IObserver, Observable } from "./Observable";
-import { Task } from "../Task";
 import { Subject } from "./Subject";
 
 interface ChannelWideContext<T> {
@@ -45,10 +44,12 @@ class ChannelObserver<T> implements IObserver<T, ChannelObserver<T>> {
   constructor(private _wide: ChannelWideContext<T>) {}
 
   next(value: T) {
-    return this._wide.remote ? this._wide.remote.next(value) : Task.resolved;
+    return this._wide.remote
+      ? this._wide.remote.next(value)
+      : Promise.resolve();
   }
 
   complete() {
-    return this._wide.remote ? this._wide.remote.complete() : Task.resolved;
+    return this._wide.remote ? this._wide.remote.complete() : Promise.resolve();
   }
 }

@@ -1,6 +1,6 @@
 import { combineLatest } from "./combineLatest";
 import { Observable } from "../Observable";
-import { Timeout } from "../Task";
+import { timeout } from "../timeout";
 
 describe("combineLatest", () => {
   it("0 streams", async () => {
@@ -10,9 +10,8 @@ describe("combineLatest", () => {
         results.push(v);
       }
     });
+    await timeout(0);
     expect(results).toEqual([[]]);
-
-    await new Promise(r => setTimeout(r));
   });
 
   it("1 input streams", async () => {
@@ -20,10 +19,13 @@ describe("combineLatest", () => {
     combineLatest([Observable.of(0)]).subscribe({
       next: v => {
         results.push(v);
+      },
+      complete: () => {
+        results.push(-1);
       }
     });
-    expect(results).toEqual([[0]]);
-    await new Promise(r => setTimeout(r));
+    await timeout(0);
+    expect(results).toEqual([[0], -1]);
   });
 
   it("2+ input streams", async () => {
@@ -33,15 +35,15 @@ describe("combineLatest", () => {
       new Observable<number>(observer => {
         observer
           .next(0)
-          .bind(() => new Timeout(0))
-          .run(() => observer.next(1));
+          .then(() => timeout(0))
+          .then(() => observer.next(1));
       }),
       new Observable<number>(observer => {
         observer
           .next(2)
-          .bind(() => new Timeout(10))
-          .bind(() => observer.next(22))
-          .run(() => observer.complete());
+          .then(() => timeout(10))
+          .then(() => observer.next(22))
+          .then(() => observer.complete());
       }),
       new Observable<number>(observer => {
         observer.next(3);
@@ -55,11 +57,11 @@ describe("combineLatest", () => {
       }
     });
 
-    await new Promise(r => setTimeout(r, 1000));
+    await timeout(1000);
 
     expect(results).toEqual([[0, 2, 3], [1, 2, 3], [1, 22, 3], completion]);
     sub.cancel();
 
-    await new Promise(r => setTimeout(r));
+    await timeout(0);
   });
 });

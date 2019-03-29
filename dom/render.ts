@@ -1,5 +1,4 @@
 import { HulloElement, SyncMode } from "./element";
-import { Task, Consumer } from "../core/Task";
 import {
   IObserver,
   IObservable,
@@ -363,18 +362,14 @@ function render_event_regular<NAME extends string>(
   name: NAME,
   handler: In<HulloElement["events"], NAME>
 ): Possesion {
-  htmlElement.addEventListener(name, schedulingEventListener);
+  htmlElement.addEventListener(name, handler as (event: Event) => any);
 
   return {
     // abandon: noop,
     clean: function cancelEventListenerApplication() {
-      htmlElement.removeEventListener(name, schedulingEventListener);
+      htmlElement.removeEventListener(name, handler as (event: Event) => any);
     }
   };
-
-  function schedulingEventListener(event: Event) {
-    Task.resolve(event).run(handler as (event: Event) => any, htmlElement);
-  }
 }
 
 function render_event_observer<NAME extends string>(
@@ -647,38 +642,39 @@ function render_each_possesionsClean<S>(
 
 // paint sync
 
-let whenPaintedConsumer: null | Consumer<void> = null;
-let whenPaintedTask: null | Task = null;
+let resolveWhenPainted: null | ((v: void) => any) = null;
+let whenPaintedTask: null | Promise<void> = null;
 
-const whenPainted: () => Task =
+const whenPainted: () => Promise<void> =
   typeof window === "undefined" || !("requestAnimationFrame" in window)
     ? function getWhenPainted() {
         return (
-          whenPaintedTask || (whenPaintedTask = new Task(whenPainter_timeout))
+          whenPaintedTask ||
+          (whenPaintedTask = new Promise<void>(whenPainter_timeout))
         );
       }
     : function getWhenPainted() {
-        return whenPaintedTask || (whenPaintedTask = new Task(whenPainted_raf));
+        return (
+          whenPaintedTask ||
+          (whenPaintedTask = new Promise<void>(whenPainted_raf))
+        );
       };
 
-function whenPainter_timeout(consumer: Consumer<void>) {
-  if (whenPaintedConsumer) {
-    setTimeout(flushWhenPaintedCbs, 0);
-  }
-  whenPaintedConsumer = consumer;
+function whenPainter_timeout(resolve: (v: void) => any) {
+  setTimeout(flushWhenPaintedCbs, 0);
+  resolveWhenPainted = resolve;
 }
 
-function whenPainted_raf(consumer: Consumer<void>) {
-  if (whenPaintedConsumer) {
-    window.requestAnimationFrame(flushWhenPaintedCbs);
-  }
-  whenPaintedConsumer = consumer;
+function whenPainted_raf(resolve: (v: void) => any) {
+  window.requestAnimationFrame(flushWhenPaintedCbs);
+  resolveWhenPainted = resolve;
 }
 
 function flushWhenPaintedCbs() {
-  if (whenPaintedConsumer) {
-    const _whenPaintedConsumer = whenPaintedConsumer;
-    whenPaintedConsumer = null;
-    _whenPaintedConsumer.resolve();
+  whenPaintedTask = null;
+  if (resolveWhenPainted) {
+    const _whenPaintedConsumer = resolveWhenPainted;
+    resolveWhenPainted = null;
+    _whenPaintedConsumer();
   }
 }

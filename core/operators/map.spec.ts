@@ -1,8 +1,9 @@
 import { Observable } from "../Observable";
 import { map } from "./map";
+import { timeout } from "../timeout";
 
 describe("Observable", () => {
-  it("::map", () => {
+  it("::map", async () => {
     const result: string[] = [];
     new Observable<number>(observer => {
       observer.next(2);
@@ -15,6 +16,7 @@ describe("Observable", () => {
           result.push(n);
         }
       });
+    await timeout(0);
     expect(result).toEqual(["20", "30"]);
   });
 });

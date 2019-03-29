@@ -1,6 +1,4 @@
 import { Observable, IObserver, IObservable, Subscription } from "./Observable";
-import { Task } from "../Task";
-import { schedule } from "../Task/schedule";
 
 type StateWideContext<T> = {
   initial: T;
@@ -52,7 +50,7 @@ function subjectProduce<T>(this: StateContext<T>, observer: IObserver<T>) {
     this.wide.clients = [];
   }
   this.wide.clients.push(this);
-  schedule<void, StateContext<T>>(sendInitial, this);
+  Promise.resolve(this).then(sendInitial);
 
   this.wide.sourceSub =
     this.wide.sourceSub ||
@@ -60,11 +58,11 @@ function subjectProduce<T>(this: StateContext<T>, observer: IObserver<T>) {
   return subjectCancel;
 }
 
-function sendInitial<T>(this: StateContext<T>) {
-  if (this.initialValueScheduled) {
-    this.initialValueScheduled = false;
-    this.observer!.next(
-      "last" in this.wide ? this.wide.last! : this.wide.initial
+function sendInitial<T>(context: StateContext<T>) {
+  if (context.initialValueScheduled) {
+    context.initialValueScheduled = false;
+    context.observer!.next(
+      "last" in context.wide ? context.wide.last! : context.wide.initial
     );
   }
 }
@@ -93,7 +91,7 @@ class BroadcastObserver<T> implements IObserver<T, BroadcastObserver<T>> {
 
   next(value: T) {
     this._wideContext.last = value;
-    const deliveries: Task<void>[] = [];
+    const deliveries: Promise<void>[] = [];
     const { clients } = this._wideContext;
     if (clients != undefined) {
       for (let i = 0, l = clients.length; i < l; i++) {
@@ -101,26 +99,22 @@ class BroadcastObserver<T> implements IObserver<T, BroadcastObserver<T>> {
       }
       for (let i = 0, l = clients.length; i < l; i++) {
         const delivery = clients[i].observer!.next(value);
-        if (delivery !== Task.resolved) {
-          deliveries.push(delivery);
-        }
+        deliveries.push(delivery);
       }
     }
-    return deliveries.length ? Task.all(deliveries) : Task.resolved;
+    return deliveries.length ? Promise.all(deliveries) : Promise.resolve();
   }
 
   complete() {
-    const deliveries: Task<void>[] = [];
+    const deliveries: Promise<void>[] = [];
     const { clients } = this._wideContext;
     this._wideContext.clients = undefined;
     if (clients != undefined) {
       for (let i = 0, l = clients.length; i < l; i++) {
         const delivery = clients[i].observer!.complete();
-        if (delivery !== Task.resolved) {
-          deliveries.push(delivery);
-        }
+        deliveries.push(delivery);
       }
     }
-    return deliveries.length ? Task.all(deliveries) : Task.resolved;
+    return deliveries.length ? Promise.all(deliveries) : Promise.resolve();
   }
 }

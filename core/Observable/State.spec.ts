@@ -1,12 +1,12 @@
 import { IObserver, Observable } from "./Observable";
-import { Task } from "../Task";
 import { State } from "./State";
+import { timeout } from "../timeout";
 
 describe("State", () => {
-  it("regular", () => {
+  it("regular", async () => {
     let remoteObserver: IObserver<number> = {
-      next: _n => Task.resolved,
-      complete: () => Task.resolved
+      next: _n => Promise.resolve(),
+      complete: () => Promise.resolve()
     };
     const state = new State(
       new Observable<number>(observer => {
@@ -25,10 +25,12 @@ describe("State", () => {
 
     Observable.of([1, 2, 4, 6]).subscribe(remoteObserver);
 
+    await timeout(100);
+
     expect(results).toEqual([0, 1, 2, 4, 6]);
   });
 
-  it("latter sub gets last value", () => {
+  it("latter sub gets last value", async () => {
     const state = new State(
       new Observable<number>(observer => {
         Observable.of([1, 2, 4, 6]).subscribe({
@@ -43,6 +45,8 @@ describe("State", () => {
     // first sub
     state.subscribe({});
 
+    await timeout(100);
+
     // latter sub
     const results: number[] = [];
     state.subscribe({
@@ -50,6 +54,8 @@ describe("State", () => {
         results.push(v);
       }
     });
+
+    await timeout(100);
 
     expect(results).toEqual([6]);
   });

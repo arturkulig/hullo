@@ -6,7 +6,6 @@ import {
   IObserver,
   IObservable
 } from "./Observable";
-import { Task } from "../Task";
 import { Transducer } from "./Transducer";
 
 const duplexSymbol = Symbol("is Duplex");
@@ -41,11 +40,11 @@ export class Duplex<IN, OUT, ObserverCtx>
     protected _observerContext: ObserverCtx = _observer as any
   ) {}
 
-  next(value: IN): Task<any> {
+  next(value: IN) {
     return this._observer.next.call(this._observerContext, value);
   }
 
-  complete(): Task<any> {
+  complete() {
     return this._observer.complete.call(this._observerContext);
   }
 

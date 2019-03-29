@@ -1,6 +1,5 @@
 import { Transducer } from "../Observable";
 import { IObserver, IObservable, Subscription } from "../Observable";
-import { Task, Consumer } from "../Task";
 
 export function flatMap<T, U>(xt: Transform<T, U>): FlatMap<T, U> {
   return {
@@ -37,25 +36,18 @@ function start<T, U>(
   };
 }
 
-function next<T, U>(this: FlatMapContext<T, U>, value: T) {
-  return new Task(flatten, { context: this, inner: value });
-}
-
-function flatten<T, U>(
-  this: { context: FlatMapContext<T, U>; inner: T },
-  consumer: Consumer<void>
-) {
-  this.context.subscriptions.push(
-    this.context
-      .xt(this.inner)
-      .subscribe(new FlatMapObserver(this.context, consumer))
-  );
+function next<T, U>(this: FlatMapContext<T, U>, outerValue: T) {
+  return new Promise<void>(r => {
+    this.subscriptions.push(
+      this.xt(outerValue).subscribe(new FlatMapObserver(this, r))
+    );
+  });
 }
 
 class FlatMapObserver<T> {
   constructor(
     private _context: FlatMapContext<any, T>,
-    private _ack: Consumer<void>
+    private _ack: (v: void) => any
   ) {}
 
   next(value: T) {
@@ -63,7 +55,7 @@ class FlatMapObserver<T> {
   }
 
   complete() {
-    this._ack.resolve();
+    this._ack();
   }
 }
 

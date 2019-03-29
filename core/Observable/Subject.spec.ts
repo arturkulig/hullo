@@ -1,6 +1,6 @@
-import { Task, Timeout } from "../Task";
 import { IObserver, Observable } from "./Observable";
 import { Subject } from "./Subject";
+import { timeout } from "../timeout";
 
 it("Subject", async () => {
   let sourceProducerCalled = 0;
@@ -8,8 +8,8 @@ it("Subject", async () => {
   const results2: number[] = [];
 
   let remoteObserver: IObserver<number> = {
-    next: Task.resolve,
-    complete: Task.resolve
+    next: () => Promise.resolve(),
+    complete: () => Promise.resolve()
   };
 
   const subject = new Subject(
@@ -17,7 +17,10 @@ it("Subject", async () => {
       sourceProducerCalled++;
       remoteObserver = observer;
       return () => {
-        remoteObserver = { next: Task.resolve, complete: Task.resolve };
+        remoteObserver = {
+          next: () => Promise.resolve(),
+          complete: () => Promise.resolve()
+        };
       };
     })
   );
@@ -34,23 +37,25 @@ it("Subject", async () => {
     }
   });
 
-  remoteObserver.next(5).run(() => remoteObserver.next(6));
+  remoteObserver.next(5).then(() => remoteObserver.next(6));
+
+  await new Promise(r => setTimeout(r, 1000));
 
   subject.subscribe({
     next: n => {
       results2.push(n);
-      return new Timeout(n);
+      return timeout(n);
     },
     complete: () => {
       results2.push(Number.NEGATIVE_INFINITY);
-      return new Timeout(0);
+      return timeout(0);
     }
   });
 
   remoteObserver
     .next(7)
-    .bind(() => remoteObserver.next(8))
-    .run(() => remoteObserver.complete());
+    .then(() => remoteObserver.next(8))
+    .then(() => remoteObserver.complete());
 
   await new Promise(r => setTimeout(r, 1000));
 

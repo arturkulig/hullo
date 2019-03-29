@@ -1,6 +1,5 @@
 import { Transducer } from "../Observable/Transducer";
 import { IObserver } from "../Observable";
-import { Task } from "../Task";
 
 export function filter<T>(predicate: Predicate<T>): Filter<T> {
   return {
@@ -32,7 +31,9 @@ function start<T>(this: Filter<T>, successive: IObserver<T>): FilterCtx<T> {
 }
 
 function next<T>(this: FilterCtx<T>, value: T) {
-  return this.predicate(value) ? this.successive.next(value) : Task.resolved;
+  return this.predicate(value)
+    ? this.successive.next(value)
+    : Promise.resolve();
 }
 
 function complete<T>(this: FilterCtx<T>) {

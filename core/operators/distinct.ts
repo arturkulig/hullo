@@ -1,6 +1,5 @@
 import { Transducer } from "../Observable/Transducer";
 import { IObserver } from "../Observable";
-import { Task } from "../Task";
 
 export function distinct<T>(predicate: Comparator<T>): Distinct<T> {
   return {
@@ -64,7 +63,7 @@ function start<T>(this: Distinct<T>, successive: IObserver<T>): DistinctCtx<T> {
 
 function next<T>(this: DistinctCtx<T>, value: T) {
   if ("last" in this && !this.predicate(value, this.last!)) {
-    return Task.resolved;
+    return Promise.resolve();
   }
   this.last = value;
   return this.successive.next(value);

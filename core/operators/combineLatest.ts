@@ -5,8 +5,6 @@ import {
   IObservable
 } from "../Observable";
 import { map } from "./map";
-import { Consumer, Task } from "../Task";
-import { schedule } from "../Task/schedule";
 
 function singleToArrayOfOne<T extends any[]>(v: T[keyof T]) {
   return [v] as T;
@@ -32,7 +30,7 @@ type CombineLatestArgument<T extends any[]> = {
 interface Frame<T extends any[]> {
   completion: boolean;
   values: T;
-  acks?: Consumer<void>[];
+  acks?: ((v: void) => any)[];
   sent: boolean;
   merged: Frame<T> | undefined;
 }
@@ -101,12 +99,13 @@ class CombineLatestEntryObserver<T extends any[]>
     // console.log("combined next");
     if (this._context.closed) {
       // console.log("combined next - closed");
-      return Task.resolved;
+      return Promise.resolve();
     }
 
     if (this._context.frame && this._context.frame.completion) {
       // console.log("combined next - completion pushed, same frame confirmation");
-      return new Task(frameDeliveryProducer, this._context.frame);
+      const frame = this._context.frame;
+      return new Promise<void>(r => frameDeliveryProducer(frame, r));
     }
 
     const values = this._context.values.slice(0) as T;
@@ -139,22 +138,23 @@ class CombineLatestEntryObserver<T extends any[]>
       //  && !this._context.sending
     ) {
       // console.log("combined next - all OK, schedule sending");
-      schedule<void, CombineLatestContext<T>>(send, this._context);
+      Promise.resolve(this._context).then(send);
     }
 
-    return new Task(frameDeliveryProducer, frame);
+    return new Promise<void>(r => frameDeliveryProducer(frame, r));
   }
 
   complete() {
     // console.log("combined complete");
     if (this._context.closed) {
       // console.log("combined complete - closed");
-      return Task.resolved;
+      return Promise.resolve();
     }
 
     if (this._context.frame && this._context.frame.completion) {
       // console.log("combined next - completion pushed, same frame confirmation");
-      return new Task(frameDeliveryProducer, this._context.frame);
+      const frame = this._context.frame;
+      return new Promise<void>(r => frameDeliveryProducer(frame, r));
     }
 
     const frame: Frame<T> = {
@@ -166,7 +166,7 @@ class CombineLatestEntryObserver<T extends any[]>
     this._context.frame = frame;
 
     // console.log("combined complete - all OK, schedule sending");
-    schedule<void, CombineLatestContext<T>>(send, this._context);
+    Promise.resolve(this._context).then(send);
 
     for (let i = 0, l = this._context.subs.length; i < l; i++) {
       if (i !== this._position && !this._context.subs[i].closed) {
@@ -174,44 +174,44 @@ class CombineLatestEntryObserver<T extends any[]>
       }
     }
 
-    return new Task(frameDeliveryProducer, frame);
+    return new Promise<void>(r => frameDeliveryProducer(frame, r));
   }
 }
 
-function send<T extends any[]>(this: CombineLatestContext<T>) {
-  if (this.closed || !this.frame || !this.observer) {
+function send<T extends any[]>(context: CombineLatestContext<T>) {
+  if (context.closed || !context.frame || !context.observer) {
     return;
   }
-  const frame = this.frame;
-  this.frame = undefined;
+  const frame = context.frame;
+  context.frame = undefined;
 
   if (frame.completion) {
-    this.closed = true;
+    context.closed = true;
   }
 
   (frame.completion
-    ? this.observer.complete()
-    : this.observer.next(frame.values)
-  ).run<typeof frame>(frameDeliveryConfirmations, frame);
+    ? context.observer.complete()
+    : context.observer.next(frame.values)
+  ).then(() => frameDeliveryConfirmations(frame));
 }
 
 function frameDeliveryProducer<T extends any[]>(
-  this: Frame<T>,
-  consumer: Consumer<void>
+  frame: Frame<T>,
+  resolve: (v: void) => any
 ) {
-  if (this.sent) {
-    consumer.resolve();
+  if (frame.sent) {
+    resolve();
   } else {
-    if (this.acks) {
-      this.acks.push(consumer);
+    if (frame.acks) {
+      frame.acks.push(resolve);
     } else {
-      this.acks = [consumer];
+      frame.acks = [resolve];
     }
   }
 }
 
-function frameDeliveryConfirmations<T extends any[]>(this: Frame<T>) {
-  let innerFrame: Frame<T> | undefined = this;
+function frameDeliveryConfirmations<T extends any[]>(frame: Frame<T>) {
+  let innerFrame: Frame<T> | undefined = frame;
   while (innerFrame) {
     innerFrame.sent = true;
     for (
@@ -219,7 +219,7 @@ function frameDeliveryConfirmations<T extends any[]>(this: Frame<T>) {
       i < l;
       i += 1
     ) {
-      innerFrame.acks![i].resolve();
+      innerFrame.acks![i]();
     }
     innerFrame = innerFrame.merged;
   }

@@ -29,11 +29,15 @@ function intervalProducer(this: IntervalContext, observer: IObserver<number>) {
 }
 
 function intervalTrigger(ctx: IntervalContext) {
-  ctx.observer!.next(Date.now()).run(intervalFollow, ctx);
-}
-
-function intervalFollow(this: IntervalContext) {
-  this.token = setTimeout(intervalTrigger, this.time, this);
+  ctx.token = setTimeout(
+    (ctx: IntervalContext) => {
+      ctx.observer!.next(Date.now()).then(() => {
+        intervalTrigger(ctx);
+      });
+    },
+    ctx.time,
+    ctx
+  );
 }
 
 function intervalCancel(this: IntervalContext) {

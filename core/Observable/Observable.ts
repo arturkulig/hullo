@@ -1,5 +1,3 @@
-import { schedule } from "../Task/schedule";
-import { Task, Consumer } from "../Task";
 import { Transducer } from "./Transducer";
 
 enum Stage {
@@ -12,7 +10,6 @@ interface Observation<T, ExecutionContext, ObserverContext> {
   stage: Stage;
   sending: Frame<T, ExecutionContext, ObserverContext> | undefined;
 
-  produce: Producer<T, ExecutionContext>;
   cancel?: Cancellation<ExecutionContext>;
   exeContext: ExecutionContext;
 
@@ -26,19 +23,22 @@ enum DispatchType {
   cancellation
 }
 
-interface Ack extends Consumer<void> {}
+interface Ack {
+  (v: void): any;
+}
 
 type Frame<T, ExecutionContext, ObserverContext> = {
   delivered: boolean;
   observation: Observation<T, ExecutionContext, ObserverContext>;
-  deliveryAck?: Ack;
 } & (
   | {
       type: DispatchType.message;
       value: T;
+      deliveryAck: Ack;
     }
   | {
       type: DispatchType.completion;
+      deliveryAck: Ack;
     }
   | {
       type: DispatchType.cancellation;
@@ -49,11 +49,11 @@ let running = false;
 let queue: Frame<any, any, any>[] = [];
 
 function run() {
-  if (runScheduled || running) {
+  if (runScheduled) {
     return;
   }
   runScheduled = true;
-  schedule(dispatch);
+  Promise.resolve().then(dispatch);
 }
 
 function dispatch() {
@@ -64,14 +64,13 @@ function dispatch() {
   }
   running = true;
   const buffer: Frame<any, any, any>[] = [];
-  const currentQueue = queue;
-  for (let i = 0; i < currentQueue.length; i++) {
-    const frame = currentQueue[i];
+  for (let i = 0; i < queue.length; i++) {
+    const frame = queue[i];
     if (frame.observation.stage !== Stage.active) {
       // debugger;
       continue;
     }
-    if (frame.observation.sending && !frame.observation.sending.delivered) {
+    if (frame.observation.sending) {
       // debugger;
       buffer.push(frame);
     } else {
@@ -79,31 +78,29 @@ function dispatch() {
       switch (frame.type) {
         case DispatchType.message:
           // debugger;
-          const nextAck: Task<any> =
+          const nextAck: Promise<any> =
             (frame.observation.observer.next &&
               frame.observation.observer.next.call(
                 frame.observation.observerContext,
                 frame.value
               )) ||
-            Task.resolved;
-          nextAck.run<Frame<any, any, any>>(
-            frameDeliveryConfirm,
-            frame.observation.sending
-          );
+            Promise.resolve();
+          nextAck.then(() => {
+            frameDeliveryConfirm(frame);
+          });
           break;
 
         case DispatchType.completion:
           // debugger;
-          const completeAck: Task<any> =
+          const completeAck: Promise<any> =
             (frame.observation.observer.complete &&
               frame.observation.observer.complete.call(
                 frame.observation.observerContext
               )) ||
-            Task.resolved;
-          completeAck.run<Frame<any, any, any>>(
-            frameDeliveryConfirm,
-            frame.observation.sending
-          );
+            Promise.resolve();
+          completeAck.then(() => {
+            frameDeliveryConfirm(frame);
+          });
           break;
 
         case DispatchType.cancellation:
@@ -132,16 +129,16 @@ export interface Subscription {
   cancel(): void;
 }
 export interface IObserver<T, ObserverContext = any> {
-  next(this: ObserverContext, value: T): Task<any>;
-  complete(this: ObserverContext): Task<any>;
+  next(this: ObserverContext, value: T): Promise<any>;
+  complete(this: ObserverContext): Promise<any>;
 }
 export interface SkippingObserver<T, ObserverContext = any> {
-  next: (this: ObserverContext, value: T) => void | Task<any>;
-  complete: (this: ObserverContext) => void | Task<any>;
+  next: (this: ObserverContext, value: T) => void | Promise<any>;
+  complete: (this: ObserverContext) => void | Promise<any>;
 }
 export interface PartialObserver<T, ObserverContext = any> {
-  next?: (this: ObserverContext, value: T) => void | Task<any>;
-  complete?: (this: ObserverContext) => void | Task<any>;
+  next?: (this: ObserverContext, value: T) => void | Promise<any>;
+  complete?: (this: ObserverContext) => void | Promise<any>;
 }
 export interface IObservable<T> {
   [observableSymbol]: boolean;
@@ -231,16 +228,16 @@ export class Observable<T, ExecutionContext = any, ExeArg = any>
       sending: undefined,
       observer,
       observerContext: (observerContext || observer) as ObserverContext,
-      exeContext,
-      produce: this._produce
+      exeContext
     };
 
     const exe = new ObservableSubscription(observation);
 
-    const cancel = observation.produce.call(
+    const cancel = this._produce.call(
       observation.exeContext,
       new Observer(observation)
     );
+
     if (cancel) {
       observation.cancel = cancel;
     }
@@ -289,74 +286,53 @@ class Observer<T, ExecutionContext, ObserverContext>
 
   next(value: T) {
     if (!this._observation.observer.next) {
-      return Task.resolved;
+      return Promise.resolve();
     }
-
-    const frame: Frame<T, ExecutionContext, ObserverContext> = {
-      type: DispatchType.message,
-      observation: this._observation,
-      value,
-      delivered: false
-    };
-    queue.push(frame);
     // debugger;
 
-    run();
+    return new Promise<void>(r => {
+      const frame: Frame<T, ExecutionContext, ObserverContext> = {
+        type: DispatchType.message,
+        observation: this._observation,
+        value,
+        delivered: false,
+        deliveryAck: r
+      };
+      // debugger;
 
-    if (frame.delivered) {
-      return Task.resolved;
-    }
-
-    return new Task(frameDeliveryProducer, frame);
+      queue.push(frame);
+      run();
+    });
   }
 
   complete() {
     if (!this._observation.observer.complete) {
-      return Task.resolved;
+      return Promise.resolve();
     }
 
-    const frame: Frame<T, ExecutionContext, ObserverContext> = {
-      type: DispatchType.completion,
-      observation: this._observation,
-      delivered: false
-    };
-    // debugger;
+    return new Promise<void>(r => {
+      const frame: Frame<T, ExecutionContext, ObserverContext> = {
+        type: DispatchType.completion,
+        observation: this._observation,
+        delivered: false,
+        deliveryAck: r
+      };
+      // debugger;
 
-    queue.push(frame);
-
-    run();
-
-    if (frame.delivered) {
-      return Task.resolved;
-    }
-
-    return new Task(frameDeliveryProducer, frame);
+      queue.push(frame);
+      run();
+    });
   }
 }
 
-function frameDeliveryProducer<T, U, V>(
-  this: Frame<T, U, V>,
-  consumer: Consumer<void>
-) {
-  if (this.delivered) {
-    // debugger;
-    consumer.resolve();
-  } else {
-    // debugger;
-    this.deliveryAck = consumer;
-  }
-}
-
-function frameDeliveryConfirm<T, U, V>(this: Frame<T, U, V>) {
+function frameDeliveryConfirm<T, U, V>(frame: Frame<T, U, V>) {
   if (
-    this.type === DispatchType.completion ||
-    this.type === DispatchType.message
+    frame.type === DispatchType.completion ||
+    frame.type === DispatchType.message
   ) {
-    this.observation.sending = undefined;
-    this.delivered = true;
-    if (this.deliveryAck) {
-      this.deliveryAck.resolve();
-    }
+    frame.observation.sending = undefined;
+    frame.delivered = true;
+    frame.deliveryAck();
     // debugger;
   }
 
@@ -473,11 +449,11 @@ class PipingObserverAdapter<T, U, XdCtx> implements IObserver<T, XdCtx> {
   constructor(private _observer: PipingObserver<T, U, XdCtx>) {}
 
   next(value: T) {
-    return this._observer.next(value) || Task.resolved;
+    return this._observer.next(value) || Promise.resolve();
   }
 
   complete() {
-    return this._observer.complete() || Task.resolved;
+    return this._observer.complete() || Promise.resolve();
   }
 }
 
@@ -542,13 +518,12 @@ function asyncSourceProduce<T>(
     }
     if (iteration.done) {
       this.drained = true;
-      observer.complete().run<typeof this>(asyncSourceIterate, this);
+      observer.complete().then(() => asyncSourceIterate(this));
     } else {
-      observer.next(iteration.value).run<typeof this>(asyncSourceIterate, this);
+      observer.next(iteration.value).then(() => asyncSourceIterate(this));
     }
   };
-  const asi: (this: AsyncSourceContext<T>) => void = asyncSourceIterate;
-  asi.call(this);
+  asyncSourceIterate(this);
 
   return asyncSourceCancel;
 }
@@ -560,21 +535,25 @@ function asyncSourceCancel<T>(this: AsyncSourceContext<T>) {
   }
 }
 
-function asyncSourceIterate<T>(this: AsyncSourceContext<T>) {
-  if (this.cancelled && this.asyncIterator && this.asyncIterator.return) {
-    this.asyncIterator.return();
+function asyncSourceIterate<T>(context: AsyncSourceContext<T>) {
+  if (
+    context.cancelled &&
+    context.asyncIterator &&
+    context.asyncIterator.return
+  ) {
+    context.asyncIterator.return();
   }
-  if (this.cancelled || this.drained) {
+  if (context.cancelled || context.drained) {
     return;
   }
 
-  this.retrieving = true;
+  context.retrieving = true;
   (
-    this.asyncIterator ||
-    (this.asyncIterator = this.asyncIterable[Symbol.asyncIterator]())
+    context.asyncIterator ||
+    (context.asyncIterator = context.asyncIterable[Symbol.asyncIterator]())
   )
     .next()
-    .then(this.resultHandler);
+    .then(context.resultHandler);
 }
 
 // ::of async iterable
@@ -598,8 +577,7 @@ function syncSourceProduce<T>(
   observer: IObserver<T>
 ) {
   this.observer = observer;
-  const asi: (this: SyncSourceContext<T>) => void = syncSourceIterate;
-  asi.call(this);
+  syncSourceIterate(this);
 
   return syncSourceCancel;
 }
@@ -611,26 +589,26 @@ function syncSourceCancel<T>(this: SyncSourceContext<T>) {
   }
 }
 
-function syncSourceIterate<T>(this: SyncSourceContext<T>) {
-  if (!this.observer) {
+function syncSourceIterate<T>(context: SyncSourceContext<T>) {
+  if (!context.observer) {
     return;
   }
 
-  if (this.drained || this.cancelled) {
+  if (context.drained || context.cancelled) {
     return;
   }
 
   const iteration = (
-    this.iterator || (this.iterator = this.iterable[Symbol.iterator]())
+    context.iterator || (context.iterator = context.iterable[Symbol.iterator]())
   ).next();
 
   if (iteration.done) {
-    this.drained = true;
-    this.observer.complete().run<typeof this>(syncSourceIterate, this);
+    context.drained = true;
+    context.observer.complete().then(() => syncSourceIterate(context));
   } else {
-    this.observer
+    context.observer
       .next(iteration.value)
-      .run<typeof this>(syncSourceIterate, this);
+      .then(() => syncSourceIterate(context));
   }
 }
 
@@ -653,17 +631,17 @@ function unitContext<T>(arg: UnitArg<T>): UnitContext<T> {
 
 function unitProducer<T>(this: UnitContext<T>, observer: IObserver<T>) {
   this.observer = observer;
-  observer.next(this.value).run<typeof this>(unitClose, this);
+  observer.next(this.value).then(() => unitClose(this));
 
   return unitCancel;
 }
 
-function unitClose<T>(this: UnitContext<T>) {
-  if (this.closed) {
+function unitClose<T>(context: UnitContext<T>) {
+  if (context.closed) {
     return;
   }
-  this.closed = true;
-  this.observer!.complete();
+  context.closed = true;
+  context.observer!.complete();
 }
 
 function unitCancel<T>(this: UnitContext<T>) {

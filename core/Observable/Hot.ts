@@ -1,5 +1,4 @@
 import { Observable, IObserver, IObservable } from "./Observable";
-import { Task } from "../Task";
 import { Subject } from "./Subject";
 
 type HotWideContext<T> = {
@@ -42,10 +41,12 @@ class MaybeObserver<T> implements IObserver<T, MaybeObserver<T>> {
   next(value: T) {
     return this._wide.observer
       ? this._wide.observer.next(value)
-      : Task.resolved;
+      : Promise.resolve();
   }
 
   complete() {
-    return this._wide.observer ? this._wide.observer.complete() : Task.resolved;
+    return this._wide.observer
+      ? this._wide.observer.complete()
+      : Promise.resolve();
   }
 }

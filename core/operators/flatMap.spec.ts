@@ -1,6 +1,6 @@
 import { flatMap } from "./flatMap";
 import { Observable } from "../Observable";
-import { Timeout } from "../Task";
+import { timeout } from "../timeout";
 
 it("flatMap", async () => {
   const results: number[] = [];
@@ -10,7 +10,7 @@ it("flatMap", async () => {
       .subscribe({
         next: n => {
           results.push(n);
-          return new Timeout(n);
+          return timeout(n);
         },
         complete: r
       });

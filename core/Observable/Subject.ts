@@ -1,5 +1,4 @@
 import { Observable, IObserver, IObservable, Subscription } from "./Observable";
-import { Task } from "../Task";
 
 type SubjectWideContext<T> = {
   sourceSub: Subscription | undefined;
@@ -64,26 +63,22 @@ class BroadcastObserver<T> implements IObserver<T, BroadcastObserver<T>> {
   constructor(private _wide: SubjectWideContext<T>) {}
 
   next(value: T) {
-    const deliveries: Task<void>[] = [];
+    const deliveries: Promise<void>[] = [];
     const { observers } = this._wide;
     for (let i = 0, l = observers.length; i < l; i++) {
       const delivery = observers[i].next(value);
-      if (delivery !== Task.resolved) {
-        deliveries.push(delivery);
-      }
+      deliveries.push(delivery);
     }
-    return deliveries.length ? Task.all(deliveries) : Task.resolved;
+    return deliveries.length ? Promise.all(deliveries) : Promise.resolve();
   }
 
   complete() {
-    const deliveries: Task<void>[] = [];
+    const deliveries: Promise<void>[] = [];
     const { observers } = this._wide;
     for (let i = 0, l = observers.length; i < l; i++) {
       const delivery = observers[i].complete();
-      if (delivery !== Task.resolved) {
-        deliveries.push(delivery);
-      }
+      deliveries.push(delivery);
     }
-    return deliveries.length ? Task.all(deliveries) : Task.resolved;
+    return deliveries.length ? Promise.all(deliveries) : Promise.resolve();
   }
 }

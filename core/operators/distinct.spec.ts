@@ -1,8 +1,9 @@
 import { distinct, distinctEqual, distinctStrictEqual } from "./distinct";
 import { Observable } from "../Observable";
+import { timeout } from "../timeout";
 
 describe("distinct", () => {
-  it("custom", () => {
+  it("custom", async () => {
     const results: number[] = [];
     Observable.of([1, 3, 3, 4, 3, 3, 10].map(v => ({ v })))
       .pipe(distinct<{ v: number }>((a, b) => a.v !== b.v))
@@ -11,10 +12,11 @@ describe("distinct", () => {
           results.push(v);
         }
       });
+    await timeout(0);
     expect(results).toEqual([1, 3, 4, 3, 10]);
   });
 
-  it("sloppy equal", () => {
+  it("sloppy equal", async () => {
     const results: (number | string)[] = [];
     Observable.of([1, 3, "3", 4, 3, 3, 10])
       .pipe(distinctEqual())
@@ -23,10 +25,11 @@ describe("distinct", () => {
           results.push(v);
         }
       });
+    await timeout(0);
     expect(results).toEqual([1, 3, 4, 3, 10]);
   });
 
-  it("strict equal", () => {
+  it("strict equal", async () => {
     const results: (number | string)[] = [];
     Observable.of([1, 3, "3", 4, 3, 3, 10])
       .pipe(distinctStrictEqual())
@@ -35,6 +38,7 @@ describe("distinct", () => {
           results.push(v);
         }
       });
+    await timeout(0);
     expect(results).toEqual([1, 3, "3", 4, 3, 10]);
   });
 });

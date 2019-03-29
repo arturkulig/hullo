@@ -1,5 +1,4 @@
 import { Transducer, IObserver, IObservable, Atom } from "../Observable";
-import { Task } from "../Task";
 
 export function parallelizeByKey<T, U>(
   xf: TrackTransform<T, U>,
@@ -57,7 +56,7 @@ function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
   const nextDetail$s: Atom<T>[] = this.detail$s.slice(0, list.length);
   const nextKeys: string[] = this.keys.slice(0, list.length);
   const nextOutput: U[] = this.output.slice(0, list.length);
-  const deliveries: Task<any>[] = [];
+  const deliveries: Promise<any>[] = [];
   let itemsMoved = 0;
   let itemsCreated = 0;
   let itemsRemoved = 0;
@@ -75,9 +74,7 @@ function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
       }
       if (this.lastInput[prevPos] !== list[i]) {
         const delivery = nextDetail$s[i].next(list[i]);
-        if (!delivery.done) {
-          deliveries.push(delivery);
-        }
+        deliveries.push(delivery);
       }
     } else {
       itemsCreated++;
@@ -87,9 +84,7 @@ function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
       nextDetail$s[i] = detail$;
       nextOutput[i] = newOutputEntry;
       const delivery = detail$.next(list[i]);
-      if (!delivery.done) {
-        deliveries.push(delivery);
-      }
+      deliveries.push(delivery);
     }
   }
 
@@ -98,17 +93,13 @@ function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
       if (nextKeys.indexOf(this.keys[i]) < 0) {
         itemsRemoved++;
         const delivery = this.detail$s[i].complete();
-        if (!delivery.done) {
-          deliveries.push(delivery);
-        }
+        deliveries.push(delivery);
       }
     }
 
   if (itemsMoved || itemsCreated || itemsRemoved) {
     const delivery = this.successive.next(nextOutput.slice(0));
-    if (!delivery.done) {
-      deliveries.push(delivery);
-    }
+    deliveries.push(delivery);
   }
 
   this.detail$s = nextDetail$s;
@@ -116,22 +107,18 @@ function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
   this.output = nextOutput;
   this.lastInput = list;
 
-  return deliveries.length ? Task.all(deliveries) : Task.resolved;
+  return deliveries.length ? Promise.all(deliveries) : Promise.resolve();
 }
 
 function complete<T, U>(this: KeyedParallelContext<T, U>) {
-  const deliveries: Task<void>[] = [];
+  const deliveries: Promise<void>[] = [];
   for (let i = 0, l = this.detail$s.length; i < l; i++) {
     const delivery = this.detail$s[i].complete();
-    if (!delivery.done) {
-      deliveries.push(delivery);
-    }
+    deliveries.push(delivery);
   }
   {
     const delivery = this.successive.complete();
-    if (!delivery.done) {
-      deliveries.push(delivery);
-    }
+    deliveries.push(delivery);
   }
-  return Task.all(deliveries);
+  return Promise.all(deliveries);
 }

@@ -1,7 +1,6 @@
 import { html, HulloElement, mount } from "../../dom";
 import {
   Observable,
-  Execution,
   Interval,
   State,
   Atom,
@@ -28,15 +27,13 @@ function App() {
       height: "10px",
       background: "#eee",
       transform: new Observable<void>(observer => {
-        let currentSending: null | Execution = null;
+        let closed = false;
         function send() {
-          currentSending = observer.next().run(send);
+          if (!closed) observer.next().then(send);
         }
         send();
         return () => {
-          if (currentSending) {
-            currentSending.cancel();
-          }
+          closed = true;
         };
       }).pipe(
         map(
