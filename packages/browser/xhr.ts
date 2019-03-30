@@ -13,7 +13,7 @@ type Response<T extends { [id: number]: any }> = {
   }
 }[keyof T];
 
-enum BodyType {
+export enum BodyType {
   arrayBuffer = "arrayBuffer",
   blob = "blob",
   formData = "formData",
