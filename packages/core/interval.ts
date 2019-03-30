@@ -1,17 +1,11 @@
-import { Observable, IObserver } from "./Observable";
+import { Observable, Observer, observable } from "./observable";
 
-type IntervalArg = number;
-
-interface IntervalContext {
-  observer?: IObserver<number>;
-  time: number;
-  token: any;
-}
-
-export class Interval extends Observable<number, IntervalContext, IntervalArg> {
-  constructor(arg: IntervalArg) {
-    super(intervalProducer, intervalContext, arg);
-  }
+export function interval(time: number): Observable<number> {
+  return observable<Number, IntervalContext, IntervalArg>(
+    intervalProducer,
+    intervalContext,
+    time
+  );
 }
 
 function intervalContext(arg: IntervalArg): IntervalContext {
@@ -21,7 +15,7 @@ function intervalContext(arg: IntervalArg): IntervalContext {
   };
 }
 
-function intervalProducer(this: IntervalContext, observer: IObserver<number>) {
+function intervalProducer(this: IntervalContext, observer: Observer<number>) {
   this.observer = observer;
   intervalTrigger(this);
 
@@ -44,4 +38,12 @@ function intervalCancel(this: IntervalContext) {
   if (this.token) {
     clearTimeout(this.token);
   }
+}
+
+type IntervalArg = number;
+
+interface IntervalContext {
+  observer?: Observer<number>;
+  time: number;
+  token: any;
 }

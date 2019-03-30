@@ -1,28 +1,23 @@
-import {
-  Observable,
-  IObserver,
-  IObservable,
-  Subscription
-} from "../Observable";
+import { observable, Observer, Observable, Subscription } from "../observable";
 
 type StateWideContext<T> = {
   initial: T;
   last?: T;
   sourceSub: Subscription | undefined;
-  source: IObservable<T>;
+  source: Observable<T>;
   clients: StateContext<T>[] | undefined;
 };
 
 interface StateContext<T> {
   wide: StateWideContext<T>;
-  observer: IObserver<T> | undefined;
+  observer: Observer<T> | undefined;
   initialValueScheduled: boolean;
 }
 
 export function state<T>(initial: T) {
   return function stateI(
-    source: IObservable<T>
-  ): IObservable<T> & { valueOf(): T } {
+    source: Observable<T>
+  ): Observable<T> & { valueOf(): T } {
     const wideContext: StateWideContext<T> = {
       initial,
       source,
@@ -30,7 +25,11 @@ export function state<T>(initial: T) {
       clients: undefined
     };
     return Object.assign(
-      new Observable(subjectProduce, subjectContext, wideContext),
+      observable<T, StateContext<T>, StateWideContext<T>>(
+        subjectProduce,
+        subjectContext,
+        wideContext
+      ),
       {
         valueOf(): T {
           return "last" in wideContext
@@ -50,7 +49,7 @@ function subjectContext<T>(arg: StateWideContext<T>): StateContext<T> {
   };
 }
 
-function subjectProduce<T>(this: StateContext<T>, observer: IObserver<T>) {
+function subjectProduce<T>(this: StateContext<T>, observer: Observer<T>) {
   this.observer = observer;
   if (this.wide.clients == undefined) {
     this.wide.clients = [];
@@ -92,7 +91,7 @@ function subjectCancel<T>(this: StateContext<T>) {
   }
 }
 
-class BroadcastObserver<T> implements IObserver<T, BroadcastObserver<T>> {
+class BroadcastObserver<T> implements Observer<T, BroadcastObserver<T>> {
   constructor(private _wideContext: StateWideContext<T>) {}
 
   next(value: T) {

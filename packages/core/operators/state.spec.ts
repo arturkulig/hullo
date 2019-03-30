@@ -1,14 +1,15 @@
-import { IObserver, Observable } from "../Observable/Observable";
 import { state } from "./state";
 import { timeout } from "../timeout";
+import { of } from "../of";
+import { Observer, observable } from "../observable";
 
 describe("State", () => {
   it("regular", async () => {
-    let remoteObserver: IObserver<number> = {
+    let remoteObserver: Observer<number> = {
       next: _n => Promise.resolve(),
       complete: () => Promise.resolve()
     };
-    const s = new Observable<number>(observer => {
+    const s = observable<number>(observer => {
       remoteObserver = observer;
       return () => {};
     }).pipe(state(0));
@@ -22,7 +23,7 @@ describe("State", () => {
 
     await timeout(100);
 
-    Observable.of([1, 2, 4, 6]).subscribe(remoteObserver);
+    of([1, 2, 4, 6]).subscribe(remoteObserver);
 
     await timeout(100);
 
@@ -30,8 +31,8 @@ describe("State", () => {
   });
 
   it("latter sub gets last value", async () => {
-    const s = new Observable<number>(observer => {
-      Observable.of([1, 2, 4, 6]).subscribe({
+    const s = observable<number>(observer => {
+      of([1, 2, 4, 6]).subscribe({
         next(v) {
           return observer.next(v);
         }

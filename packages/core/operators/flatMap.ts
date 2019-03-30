@@ -1,31 +1,30 @@
-import {
-  Observable,
-  IObservable,
-  IObserver,
-  Subscription
-} from "../Observable";
+import { Subscription, observable, Observable, Observer } from "../observable";
 
-export function flatMap<T, U>(xf: (v: T) => IObservable<U>) {
-  return function flatMapI(source: IObservable<T>) {
-    return new Observable<U>(flatMapProducer, flatMapContext, { xf, source });
+export function flatMap<T, U>(xf: (v: T) => Observable<U>) {
+  return function flatMapI(source: Observable<T>) {
+    return observable<U, FlatMapContext<T, U>, FlatMapArg<T, U>>(
+      flatMapProducer,
+      flatMapContext,
+      { xf, source }
+    );
   };
 }
 
 interface FlatMapArg<T, U> {
-  xf: (v: T) => IObservable<U>;
-  source: IObservable<T>;
+  xf: (v: T) => Observable<U>;
+  source: Observable<T>;
 }
 
 interface FlatMapContext<T, U> {
-  xf: (v: T) => IObservable<U>;
-  source: IObservable<T>;
+  xf: (v: T) => Observable<U>;
+  source: Observable<T>;
   sub: Subscription | undefined;
   innerSub: Subscription | undefined;
 }
 
 interface FlatMapSubContext<T, U> {
   context: FlatMapContext<T, U>;
-  observer: IObserver<U>;
+  observer: Observer<U>;
 }
 
 function flatMapContext<T, U>(arg: FlatMapArg<T, U>): FlatMapContext<T, U> {
@@ -39,7 +38,7 @@ function flatMapContext<T, U>(arg: FlatMapArg<T, U>): FlatMapContext<T, U> {
 
 function flatMapProducer<T, U>(
   this: FlatMapContext<T, U>,
-  observer: IObserver<U>
+  observer: Observer<U>
 ) {
   const subCtx: FlatMapSubContext<T, U> = { observer, context: this };
   this.sub = this.source.subscribe(

@@ -1,8 +1,8 @@
 import { HulloElement, SyncMode } from "./element";
 import {
-  IObserver,
-  IObservable,
-  PartialObserver,
+  Observer,
+  Observable,
+  Subscriber,
   Subscription
 } from "../core/observable";
 
@@ -377,7 +377,7 @@ function render_event_observer<NAME extends string>(
   name: NAME,
   handler: In<HulloElement["events"], NAME>
 ): Possesion {
-  const observer = handler as IObserver<Event>;
+  const observer = handler as Observer<Event>;
   let closed = false;
 
   htmlElement.addEventListener(name, render_event_observer_listener);
@@ -563,7 +563,7 @@ function render_attr_cleanup(
 function render_each<T, S = {}>(
   htmlElement: HTMLElement,
   syncMode: SyncMode,
-  streamOrValue: IObservable<T> | T,
+  streamOrValue: Observable<T> | T,
   state: S,
   process: (h: HTMLElement, o: SyncMode, v: T, s: S) => void,
   cleanup: (h: HTMLElement, o: SyncMode, s: S) => void
@@ -581,7 +581,7 @@ function render_each<T, S = {}>(
       cleanup,
       next: render_each_next
     };
-    const subscription = (streamOrValue as IObservable<T>).subscribe(observer);
+    const subscription = (streamOrValue as Observable<T>).subscribe(observer);
     const repc: RenderEachPossesions<S> = {
       cleanup,
       subscription,
@@ -602,7 +602,7 @@ function render_each<T, S = {}>(
   }
 }
 
-interface RenderEachObserver<T, S = {}> extends PartialObserver<T> {
+interface RenderEachObserver<T, S = {}> extends Subscriber<T> {
   htmlElement: HTMLElement;
   syncMode: SyncMode;
   state: S;

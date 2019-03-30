@@ -1,19 +1,19 @@
-import { IObserver, Observable } from "../Observable/Observable";
 import { subject } from "./subject";
 import { timeout } from "../timeout";
+import { observable, Observer } from "../observable";
 
-describe("Observable", () => {
+describe("observable", () => {
   it("subject", async () => {
     let sourceProducerCalled = 0;
     const results1: number[] = [];
     const results2: number[] = [];
 
-    let remoteObserver: IObserver<number> = {
+    let remoteObserver: Observer<number> = {
       next: () => Promise.resolve(),
       complete: () => Promise.resolve()
     };
 
-    const s = new Observable<number>(observer => {
+    const s = observable<number>(observer => {
       sourceProducerCalled++;
       remoteObserver = observer;
       return () => {

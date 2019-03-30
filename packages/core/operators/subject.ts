@@ -1,27 +1,26 @@
-import {
-  Observable,
-  IObserver,
-  IObservable,
-  Subscription
-} from "../Observable/Observable";
+import { Observer, Observable, Subscription, observable } from "../observable";
 
 type SubjectWideContext<T> = {
   sourceSub: Subscription | undefined;
-  source: IObservable<T>;
-  observers: IObserver<T>[];
+  source: Observable<T>;
+  observers: Observer<T>[];
 };
 
 interface SubjectContext<T> {
   wide: SubjectWideContext<T>;
-  observer: IObserver<T> | undefined;
+  observer: Observer<T> | undefined;
 }
 
-export function subject<T>(source: IObservable<T>) {
-  return new Observable<T>(subjectProduce, subjectContext, {
-    source,
-    sourceSub: undefined,
-    observers: []
-  });
+export function subject<T>(source: Observable<T>): Observable<T> {
+  return observable<T, SubjectContext<T>, SubjectWideContext<T>>(
+    subjectProduce,
+    subjectContext,
+    {
+      source,
+      sourceSub: undefined,
+      observers: []
+    }
+  );
 }
 
 function subjectContext<T>(arg: SubjectWideContext<T>): SubjectContext<T> {
@@ -31,7 +30,7 @@ function subjectContext<T>(arg: SubjectWideContext<T>): SubjectContext<T> {
   };
 }
 
-function subjectProduce<T>(this: SubjectContext<T>, observer: IObserver<T>) {
+function subjectProduce<T>(this: SubjectContext<T>, observer: Observer<T>) {
   this.observer = observer;
   this.wide.observers.push(observer);
   this.wide.sourceSub =
@@ -58,7 +57,7 @@ function subjectCancel<T>(this: SubjectContext<T>) {
   }
 }
 
-class BroadcastObserver<T> implements IObserver<T, BroadcastObserver<T>> {
+class BroadcastObserver<T> implements Observer<T, BroadcastObserver<T>> {
   constructor(private _wide: SubjectWideContext<T>) {}
 
   next(value: T) {

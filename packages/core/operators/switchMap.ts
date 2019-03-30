@@ -1,34 +1,33 @@
-import {
-  Observable,
-  IObservable,
-  IObserver,
-  Subscription
-} from "../Observable";
+import { observable, Observable, Observer, Subscription } from "../observable";
 
-export function switchMap<T, U>(xf: (v: T) => IObservable<U>) {
-  return function switchMapI(source: IObservable<T>) {
-    return new Observable<U>(switchMapProducer, switchMapContext, {
-      xf,
-      source
-    });
+export function switchMap<T, U>(xf: (v: T) => Observable<U>) {
+  return function switchMapI(source: Observable<T>) {
+    return observable<U, SwitchMapContext<T, U>, SwitchMapArg<T, U>>(
+      switchMapProducer,
+      switchMapContext,
+      {
+        xf,
+        source
+      }
+    );
   };
 }
 
 interface SwitchMapArg<T, U> {
-  xf: (v: T) => IObservable<U>;
-  source: IObservable<T>;
+  xf: (v: T) => Observable<U>;
+  source: Observable<T>;
 }
 
 interface SwitchMapContext<T, U> {
-  xf: (v: T) => IObservable<U>;
-  source: IObservable<T>;
+  xf: (v: T) => Observable<U>;
+  source: Observable<T>;
   sub: Subscription | undefined;
   innerSub: Subscription | undefined;
 }
 
 interface SwitchMapSubContext<T, U> {
   context: SwitchMapContext<T, U>;
-  observer: IObserver<U>;
+  observer: Observer<U>;
 }
 
 function switchMapContext<T, U>(
@@ -44,7 +43,7 @@ function switchMapContext<T, U>(
 
 function switchMapProducer<T, U>(
   this: SwitchMapContext<T, U>,
-  observer: IObserver<U>
+  observer: Observer<U>
 ) {
   const subCtx: SwitchMapSubContext<T, U> = { observer, context: this };
   this.sub = this.source.subscribe(

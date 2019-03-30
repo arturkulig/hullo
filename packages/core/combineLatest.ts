@@ -1,26 +1,26 @@
-import {
-  Observable,
-  IObserver,
-  Subscription,
-  IObservable
-} from "../Observable";
-import { map } from "./map";
+import { Observable, Subscription, observable, Observer } from "./observable";
+import { map } from "./operators/map";
+import { of } from "./of";
 
 function singleToArrayOfOne<T extends any[]>(v: T[keyof T]) {
   return [v] as T;
 }
 
 export function combineLatest<T extends [...any[]]>(
-  streams: { [idx in keyof T]: IObservable<T[idx]> }
-): IObservable<T> {
+  streams: { [idx in keyof T]: Observable<T[idx]> }
+): Observable<T> {
   // console.log("combine many", streams.length);
   if (streams.length === 0) {
-    return Observable.of([([] as unknown) as T]);
+    return of([([] as unknown) as T]);
   }
   if (streams.length === 1) {
     return streams[0].pipe(map<T[keyof T], T>(singleToArrayOfOne));
   }
-  return new Observable(combineLatestProducer, combineLatestContext, streams);
+  return observable<T, CombineLatestContext<T>, CombineLatestArgument<T>>(
+    combineLatestProducer,
+    combineLatestContext,
+    streams
+  );
 }
 
 type CombineLatestArgument<T extends any[]> = {
@@ -44,7 +44,7 @@ interface CombineLatestContext<T extends any[]> {
   values: T;
   // sending: boolean;
   frame: Frame<T> | undefined;
-  observer?: IObserver<T>;
+  observer?: Observer<T>;
 }
 
 function combineLatestContext<T extends any[]>(
@@ -66,7 +66,7 @@ function combineLatestContext<T extends any[]>(
 
 function combineLatestProducer<T extends any[]>(
   this: CombineLatestContext<T>,
-  observer: IObserver<T>
+  observer: Observer<T>
 ) {
   // console.log("combined start");
   this.observer = observer;
@@ -89,7 +89,7 @@ function combineLatestCancel<T extends any[]>(this: CombineLatestContext<T>) {
 }
 
 class CombineLatestEntryObserver<T extends any[]>
-  implements IObserver<T[keyof T], CombineLatestEntryObserver<T>> {
+  implements Observer<T[keyof T], CombineLatestEntryObserver<T>> {
   constructor(
     private _context: CombineLatestContext<T>,
     private _position: number

@@ -1,10 +1,11 @@
-import { Observable } from "./Observable";
-import { timeout } from "../timeout";
+import { observable } from "./observable";
+import { timeout } from "./timeout";
+import { of } from "./of";
 
 describe("observable", () => {
   it("sends one message", async () => {
     let producerCalled = 0;
-    const o = new Observable<number>(observer => {
+    const o = observable<number>(observer => {
       producerCalled++;
       observer.next(6);
     });
@@ -22,7 +23,7 @@ describe("observable", () => {
   });
 
   it("sends two messages", async () => {
-    const o = new Observable<number>(observer => {
+    const o = observable<number>(observer => {
       observer
         .next(6)
         .then(() => observer.next(7))
@@ -43,7 +44,7 @@ describe("observable", () => {
   });
 
   it("sends three messages", async () => {
-    const o = new Observable<number>(observer => {
+    const o = observable<number>(observer => {
       observer
         .next(6)
         .then(() => observer.next(7))
@@ -65,7 +66,7 @@ describe("observable", () => {
   });
 
   it("cancels", async () => {
-    const o = new Observable<number>(observer => {
+    const o = observable<number>(observer => {
       observer
         .next(6)
         .then(() => timeout(10))
@@ -89,7 +90,7 @@ describe("observable", () => {
   describe("of", () => {
     it("unit", async () => {
       const result: number[] = [];
-      Observable.of(1).subscribe({
+      of(1).subscribe({
         next: v => {
           result.push(v);
         }
@@ -100,7 +101,7 @@ describe("observable", () => {
 
     it("iterable", async () => {
       const result: number[] = [];
-      Observable.of([1, 2, 3]).subscribe({
+      of([1, 2, 3]).subscribe({
         next: v => {
           result.push(v);
         }
@@ -112,7 +113,7 @@ describe("observable", () => {
 
   it("acknowledged asynchronously", async () => {
     const result: number[] = [];
-    Observable.of([1, 2, 3, 4]).subscribe({
+    of([1, 2, 3, 4]).subscribe({
       next: v => {
         result.push(v);
         return timeout(v * 10);

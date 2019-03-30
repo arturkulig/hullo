@@ -1,26 +1,29 @@
-import {
-  Observable,
-  IObservable,
-  IObserver,
-  Subscription
-} from "../Observable";
+import { Subscription, Observable, observable, Observer } from "../observable";
 
-export function distinctEqual<T>(source: IObservable<T>) {
-  return new Observable<T>(distinctProducer, distinctContext, {
-    compare: equal,
-    source
-  });
+export function distinctEqual<T>(source: Observable<T>) {
+  return observable<T, DistinctContext<T>, DistinctArg<T>>(
+    distinctProducer,
+    distinctContext,
+    {
+      compare: equal,
+      source
+    }
+  );
 }
 
 function equal<T>(p: T, n: T) {
   return p != n;
 }
 
-export function distinctStrictEqual<T>(source: IObservable<T>) {
-  return new Observable<T>(distinctProducer, distinctContext, {
-    compare: strictEqual,
-    source
-  });
+export function distinctStrictEqual<T>(source: Observable<T>) {
+  return observable<T, DistinctContext<T>, DistinctArg<T>>(
+    distinctProducer,
+    distinctContext,
+    {
+      compare: strictEqual,
+      source
+    }
+  );
 }
 
 function strictEqual<T>(p: T, n: T) {
@@ -28,22 +31,26 @@ function strictEqual<T>(p: T, n: T) {
 }
 
 export function distinct<T>(compare: (prev: T, next: T) => boolean) {
-  return function distinctI(source: IObservable<T>) {
-    return new Observable<T>(distinctProducer, distinctContext, {
-      compare,
-      source
-    });
+  return function distinctI(source: Observable<T>) {
+    return observable<T, DistinctContext<T>, DistinctArg<T>>(
+      distinctProducer,
+      distinctContext,
+      {
+        compare,
+        source
+      }
+    );
   };
 }
 
 interface DistinctArg<T> {
   compare: (prev: T, next: T) => boolean;
-  source: IObservable<T>;
+  source: Observable<T>;
 }
 
 interface DistinctContext<T> {
   compare: (prev: T, next: T) => boolean;
-  source: IObservable<T>;
+  source: Observable<T>;
   sub: Subscription | undefined;
 }
 
@@ -51,7 +58,7 @@ interface DistinctSubContext<T> {
   hasLast: boolean;
   last?: T;
   compare: (prev: T, next: T) => boolean;
-  observer: IObserver<T>;
+  observer: Observer<T>;
 }
 
 function distinctContext<T>(arg: DistinctArg<T>): DistinctContext<T> {
@@ -62,7 +69,7 @@ function distinctContext<T>(arg: DistinctArg<T>): DistinctContext<T> {
   };
 }
 
-function distinctProducer<T>(this: DistinctContext<T>, observer: IObserver<T>) {
+function distinctProducer<T>(this: DistinctContext<T>, observer: Observer<T>) {
   this.sub = this.source.subscribe(
     {
       next: distinctNext,

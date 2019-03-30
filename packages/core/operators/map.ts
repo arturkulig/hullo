@@ -1,30 +1,29 @@
-import {
-  Observable,
-  IObservable,
-  IObserver,
-  Subscription
-} from "../Observable";
+import { Subscription, Observable, observable, Observer } from "../observable";
 
 export function map<T, U>(xf: (v: T) => U) {
-  return function mapI(source: IObservable<T>) {
-    return new Observable<U>(mapProducer, mapContext, { xf, source });
+  return function mapI(source: Observable<T>) {
+    return observable<U, MapContext<T, U>, MapArg<T, U>>(
+      mapProducer,
+      mapContext,
+      { xf, source }
+    );
   };
 }
 
 interface MapArg<T, U> {
   xf: (v: T) => U;
-  source: IObservable<T>;
+  source: Observable<T>;
 }
 
 interface MapContext<T, U> {
   xf: (v: T) => U;
-  source: IObservable<T>;
+  source: Observable<T>;
   sub: Subscription | undefined;
 }
 
 interface MapSubContext<T, U> {
   xf: (v: T) => U;
-  observer: IObserver<U>;
+  observer: Observer<U>;
 }
 
 function mapContext<T, U>(arg: MapArg<T, U>): MapContext<T, U> {
@@ -35,7 +34,7 @@ function mapContext<T, U>(arg: MapArg<T, U>): MapContext<T, U> {
   };
 }
 
-function mapProducer<T, U>(this: MapContext<T, U>, observer: IObserver<U>) {
+function mapProducer<T, U>(this: MapContext<T, U>, observer: Observer<U>) {
   this.sub = this.source.subscribe(
     {
       next: mapNext,

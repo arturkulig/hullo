@@ -1,41 +1,20 @@
-import {
-  IObserver,
-  IObservable,
-  Atom,
-  Observable,
-  Subscription
-} from "../Observable";
+import { Subscription, Observable, observable, Observer } from "../observable";
+import { Atom, atom } from "../atom";
 
-export function parallelizeByOrder<T, U>(xf: TrackTransform<T, U>) {
-  return function parallelizeByOrderI(source: IObservable<T[]>) {
-    return new Observable<U[]>(parallelizeBOProducer, parallelizeBOContext, {
+export function deepMap<T, U>(xf: TrackTransform<T, U>) {
+  return function deepMapI(source: Observable<T[]>) {
+    return observable<
+      U[],
+      OrderedParallelContext<T, U>,
+      OrderedParallelArg<T, U>
+    >(deepMapProducer, deepMapContext, {
       xf,
       source
     });
   };
 }
 
-interface TrackTransform<T, U> {
-  (value: IObservable<T>): U;
-}
-
-interface OrderedParallelArg<T, U> {
-  xf: TrackTransform<T, U>;
-  source: IObservable<T[]>;
-}
-
-interface OrderedParallelContext<T, U> {
-  observer: IObserver<U[]> | undefined;
-  sub: Subscription | undefined;
-  xf: TrackTransform<T, U>;
-  source: IObservable<T[]>;
-  detail$s: Atom<T>[];
-  keys: string[];
-  lastInput: T[];
-  output: U[];
-}
-
-function parallelizeBOContext<T, U>(
+function deepMapContext<T, U>(
   arg: OrderedParallelArg<T, U>
 ): OrderedParallelContext<T, U> {
   return {
@@ -50,9 +29,9 @@ function parallelizeBOContext<T, U>(
   };
 }
 
-function parallelizeBOProducer<T, U>(
+function deepMapProducer<T, U>(
   this: OrderedParallelContext<T, U>,
-  observer: IObserver<U[]>
+  observer: Observer<U[]>
 ) {
   this.observer = observer;
   this.sub = this.source.subscribe(
@@ -63,10 +42,10 @@ function parallelizeBOProducer<T, U>(
     this
   );
 
-  return parallelizeBOCancel;
+  return deepMapCancel;
 }
 
-function parallelizeBOCancel<T, U>(this: OrderedParallelContext<T, U>) {
+function deepMapCancel<T, U>(this: OrderedParallelContext<T, U>) {
   if (this.sub && !this.sub.closed) {
     this.sub.cancel();
   }
@@ -85,7 +64,7 @@ function next<T, U>(this: OrderedParallelContext<T, U>, list: T[]) {
 
   for (let i = this.output.length, l = list.length; i < l; i++) {
     needsToPushOutput = true;
-    const detail$ = new Atom<T>(list[i]);
+    const detail$ = atom<T>(list[i]);
     this.detail$s.push(detail$);
     this.output.push(this.xf(detail$));
     const delivery = detail$.next(list[i]);
@@ -121,4 +100,24 @@ function complete<T, U>(this: OrderedParallelContext<T, U>) {
     deliveries.push(delivery);
   }
   return Promise.all(deliveries);
+}
+
+interface TrackTransform<T, U> {
+  (value: Observable<T>): U;
+}
+
+interface OrderedParallelArg<T, U> {
+  xf: TrackTransform<T, U>;
+  source: Observable<T[]>;
+}
+
+interface OrderedParallelContext<T, U> {
+  observer: Observer<U[]> | undefined;
+  sub: Subscription | undefined;
+  xf: TrackTransform<T, U>;
+  source: Observable<T[]>;
+  detail$s: Atom<T>[];
+  keys: string[];
+  lastInput: T[];
+  output: U[];
 }

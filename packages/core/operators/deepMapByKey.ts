@@ -1,51 +1,24 @@
-import {
-  IObserver,
-  IObservable,
-  Atom,
-  Observable,
-  Subscription
-} from "../Observable";
+import { Subscription, Observable, Observer, observable } from "../observable";
+import { Atom, atom } from "../atom";
 
-export function parallelizeByKey<T, U>(
+export function deepMapByKey<T, U>(
   xf: TrackTransform<T, U>,
   identity: TrackIdentity<T>
 ) {
-  return function parallelizeByKeyI(source: IObservable<T[]>) {
-    return new Observable<U[]>(parallelizeBKProducer, parallelizeBKContext, {
-      xf,
-      identity,
-      source
-    });
+  return function deepMapByKeyI(source: Observable<T[]>) {
+    return observable<U[], KeyedParallelContext<T, U>, KeyedParallelArg<T, U>>(
+      deepMapByKeyProducer,
+      deepMapByKeyContext,
+      {
+        xf,
+        identity,
+        source
+      }
+    );
   };
 }
 
-interface TrackTransform<T, U> {
-  (value: IObservable<T>): U;
-}
-
-interface TrackIdentity<T> {
-  (value: T): string;
-}
-
-interface KeyedParallelArg<T, U> {
-  xf: TrackTransform<T, U>;
-  identity: TrackIdentity<T>;
-  source: IObservable<T[]>;
-}
-
-interface KeyedParallelContext<T, U> {
-  observer: IObserver<U[]> | undefined;
-  sub: Subscription | undefined;
-  xf: TrackTransform<T, U>;
-  identity: TrackIdentity<T>;
-  source: IObservable<T[]>;
-  detail$s: Atom<T>[];
-  keys: string[];
-  lastInput: T[];
-  output: U[];
-}
-
-function parallelizeBKContext<T, U>(
+function deepMapByKeyContext<T, U>(
   arg: KeyedParallelArg<T, U>
 ): KeyedParallelContext<T, U> {
   return {
@@ -61,9 +34,9 @@ function parallelizeBKContext<T, U>(
   };
 }
 
-function parallelizeBKProducer<T, U>(
+function deepMapByKeyProducer<T, U>(
   this: KeyedParallelContext<T, U>,
-  observer: IObserver<U[]>
+  observer: Observer<U[]>
 ) {
   this.observer = observer;
   this.sub = this.source.subscribe(
@@ -74,10 +47,10 @@ function parallelizeBKProducer<T, U>(
     this
   );
 
-  return parallelizeBKCancel;
+  return deepMapByKeyCancel;
 }
 
-function parallelizeBKCancel<T, U>(this: KeyedParallelContext<T, U>) {
+function deepMapByKeyCancel<T, U>(this: KeyedParallelContext<T, U>) {
   if (this.sub && !this.sub.closed) {
     this.sub.cancel();
   }
@@ -109,7 +82,7 @@ function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
       }
     } else {
       itemsCreated++;
-      const detail$ = new Atom<T>(list[i]);
+      const detail$ = atom<T>(list[i]);
       const newOutputEntry = this.xf(detail$);
       nextKeys[i] = this.identity(list[i]);
       nextDetail$s[i] = detail$;
@@ -155,4 +128,30 @@ function complete<T, U>(this: KeyedParallelContext<T, U>) {
     deliveries.push(delivery);
   }
   return Promise.all(deliveries);
+}
+
+interface TrackTransform<T, U> {
+  (value: Observable<T>): U;
+}
+
+interface TrackIdentity<T> {
+  (value: T): string;
+}
+
+interface KeyedParallelArg<T, U> {
+  xf: TrackTransform<T, U>;
+  identity: TrackIdentity<T>;
+  source: Observable<T[]>;
+}
+
+interface KeyedParallelContext<T, U> {
+  observer: Observer<U[]> | undefined;
+  sub: Subscription | undefined;
+  xf: TrackTransform<T, U>;
+  identity: TrackIdentity<T>;
+  source: Observable<T[]>;
+  detail$s: Atom<T>[];
+  keys: string[];
+  lastInput: T[];
+  output: U[];
 }

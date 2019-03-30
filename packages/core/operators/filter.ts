@@ -1,33 +1,32 @@
-import {
-  Observable,
-  IObservable,
-  IObserver,
-  Subscription
-} from "../Observable";
+import { Subscription, Observable, observable, Observer } from "../observable";
 
 export function filter<T>(predicate: (v: T) => boolean) {
-  return function filterI(source: IObservable<T>) {
-    return new Observable<T>(filterProducer, filterContext, {
-      predicate,
-      source
-    });
+  return function filterI(source: Observable<T>) {
+    return observable<T, FilterContext<T>, FilterArg<T>>(
+      filterProducer,
+      filterContext,
+      {
+        predicate,
+        source
+      }
+    );
   };
 }
 
 interface FilterArg<T> {
   predicate: (v: T) => boolean;
-  source: IObservable<T>;
+  source: Observable<T>;
 }
 
 interface FilterContext<T> {
   predicate: (v: T) => boolean;
-  source: IObservable<T>;
+  source: Observable<T>;
   sub: Subscription | undefined;
 }
 
 interface FilterSubContext<T> {
   predicate: (v: T) => boolean;
-  observer: IObserver<T>;
+  observer: Observer<T>;
 }
 
 function filterContext<T>(arg: FilterArg<T>): FilterContext<T> {
@@ -38,7 +37,7 @@ function filterContext<T>(arg: FilterArg<T>): FilterContext<T> {
   };
 }
 
-function filterProducer<T>(this: FilterContext<T>, observer: IObserver<T>) {
+function filterProducer<T>(this: FilterContext<T>, observer: Observer<T>) {
   this.sub = this.source.subscribe(
     {
       next: filterNext,

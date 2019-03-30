@@ -1,4 +1,4 @@
-import { Observable, IObservable } from "@hullo/core/Observable/Observable";
+import { observable, Observable } from "@hullo/core/observable";
 
 type Response<T extends { [id: number]: any }> = {
   [K in keyof T]: {
@@ -42,8 +42,8 @@ export function fetch<T extends { [id: number]: any }>(
   options: RequestInfo,
   init: RequestInit,
   outputs: BodyType = BodyType.json
-): IObservable<Response<T>> {
-  return new Observable<Response<T>>(async observer => {
+): Observable<Response<T>> {
+  return observable<Response<T>>(async observer => {
     const response = await window.fetch(options, init);
     const hulloResponse: Response<T> = {
       status: response.status,
