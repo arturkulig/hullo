@@ -4,6 +4,7 @@
     "moduleResolution": "node",
     "target": "esnext",
     "lib": ["es2015", "esnext", "esnext.asynciterable", "dom"],
+    "types": ["node"],
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
     "alwaysStrict": true,
@@ -18,6 +19,6 @@
     "pretty": true,
     "strict": true
   },
-  "include": ["*/index.ts"],
+  "include": ["packages/*/index.ts", "*.ts"],
   "exclude": ["node_modules", "old"]
 }

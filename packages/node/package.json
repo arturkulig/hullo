@@ -1,0 +1,12 @@
+{
+  "name": "@hullo/node",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "author": "Artur Kulig",
+  "license": "ISC",
+  "dependencies": {
+    "@hullo/core": "^0.1.0"
+  }
+}

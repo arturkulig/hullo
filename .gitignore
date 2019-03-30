@@ -4,6 +4,5 @@ node_modules/
 .cache
 *.js
 */*.js
-!website/*.js
 old
 TODO.md

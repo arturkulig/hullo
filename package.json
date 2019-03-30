@@ -4,26 +4,26 @@
   "description": "",
   "main": "./core",
   "scripts": {
-    "index": "./index-folders.sh",
-    "clear": "./clean_up_after_build.sh",
+    "index": "ts-node index_folders.ts",
+    "clear": "ts-node clean_up.ts",
     "check": "npm run clear; npm run index; tsc --noEmit",
-    "dev": "npm run clear; npm run index; concurrently -i -n tsc,jest \"tsc --noEmit -w\" \"jest --watch\"",
-    "build": "npm run clear; npm run index; tsc --noEmit && jest && tsc",
+    "build": "npm run check && jest && tsc",
     "prepublish": "npm run build",
-    "test": "npm run clear; npm run index; jest"
+    "test": "npm run check && jest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/glob": "^7.1.1",
     "@types/jest": "^24.0.9",
-    "@types/node": "^11.10.4",
-    "concurrently": "^4.1.0",
+    "@types/node": "^11.12.1",
+    "glob": "^7.1.3",
     "jest": "^24.1.0",
+    "lerna": "^3.13.1",
     "prettier": "^1.16.4",
     "ts-jest": "^24.0.0",
     "ts-node": "^8.0.2",
     "typescript": "^3.3.3333"
-  },
-  "dependencies": {}
+  }
 }

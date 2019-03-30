@@ -1,0 +1,9 @@
+{
+  "name": "@hullo/core",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "author": "Artur Kulig",
+  "license": "ISC"
+}
