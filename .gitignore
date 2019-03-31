@@ -1,10 +1,8 @@
 node_modules
-*/node_modules
 **/node_modules
 .idea
 .vscode
 .cache
 *.js
 *.d.ts
-old
-TODO.md
+!*config.js
