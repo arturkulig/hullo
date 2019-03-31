@@ -4,7 +4,7 @@ import {
   Observable,
   Subscriber,
   Subscription
-} from "../core/observable";
+} from "@hullo/core/observable";
 
 interface RenderCancellation<CTX = Possesion> {
   (this: CTX, element: HTMLElement, abandonment: boolean): void;

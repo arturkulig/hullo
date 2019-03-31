@@ -2,8 +2,9 @@
   "compilerOptions": {
     "module": "commonjs",
     "moduleResolution": "node",
+    "declaration": true,
     "target": "esnext",
-    "lib": ["es2015", "esnext", "esnext.asynciterable", "dom"],
+    "lib": ["esnext", "esnext.asynciterable", "dom"],
     "types": ["node", "jest"],
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,

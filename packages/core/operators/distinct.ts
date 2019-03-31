@@ -1,6 +1,6 @@
 import { Subscription, Observable, observable, Observer } from "../observable";
 
-export function distinctEqual<T>(source: Observable<T>) {
+export function distinctEqual<T>(source: Observable<T>): Observable<T> {
   return observable<T, DistinctContext<T>, DistinctArg<T>>(
     distinctProducer,
     distinctContext,
@@ -15,7 +15,7 @@ function equal<T>(p: T, n: T) {
   return p != n;
 }
 
-export function distinctStrictEqual<T>(source: Observable<T>) {
+export function distinctStrictEqual<T>(source: Observable<T>): Observable<T> {
   return observable<T, DistinctContext<T>, DistinctArg<T>>(
     distinctProducer,
     distinctContext,
@@ -31,7 +31,7 @@ function strictEqual<T>(p: T, n: T) {
 }
 
 export function distinct<T>(compare: (prev: T, next: T) => boolean) {
-  return function distinctI(source: Observable<T>) {
+  return function distinctI(source: Observable<T>): Observable<T> {
     return observable<T, DistinctContext<T>, DistinctArg<T>>(
       distinctProducer,
       distinctContext,

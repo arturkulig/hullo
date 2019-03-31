@@ -1,4 +1,4 @@
-import { Observable, Observer } from "../core/observable";
+import { Observable, Observer } from "@hullo/core/observable";
 
 export type HulloElementChildren = HulloElement[] | Observable<HulloElement[]>;
 

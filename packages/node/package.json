@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "",
   "main": "index.js",
-  "type": "module",
   "scripts": {},
   "author": "Artur Kulig",
   "license": "ISC",

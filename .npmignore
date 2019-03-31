@@ -3,6 +3,4 @@ node_modules/
 .vscode
 .cache
 *.ts
-*/*.ts
 old
-TODO.md

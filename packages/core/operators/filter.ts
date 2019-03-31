@@ -1,7 +1,7 @@
 import { Subscription, Observable, observable, Observer } from "../observable";
 
 export function filter<T>(predicate: (v: T) => boolean) {
-  return function filterI(source: Observable<T>) {
+  return function filterI(source: Observable<T>): Observable<T> {
     return observable<T, FilterContext<T>, FilterArg<T>>(
       filterProducer,
       filterContext,

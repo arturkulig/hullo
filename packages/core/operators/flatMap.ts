@@ -1,7 +1,7 @@
 import { Subscription, observable, Observable, Observer } from "../observable";
 
 export function flatMap<T, U>(xf: (v: T) => Observable<U>) {
-  return function flatMapI(source: Observable<T>) {
+  return function flatMapI(source: Observable<T>): Observable<U> {
     return observable<U, FlatMapContext<T, U>, FlatMapArg<T, U>>(
       flatMapProducer,
       flatMapContext,

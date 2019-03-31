@@ -5,7 +5,7 @@ export function deepMapByKey<T, U>(
   xf: TrackTransform<T, U>,
   identity: TrackIdentity<T>
 ) {
-  return function deepMapByKeyI(source: Observable<T[]>) {
+  return function deepMapByKeyI(source: Observable<T[]>): Observable<U[]> {
     return observable<U[], KeyedParallelContext<T, U>, KeyedParallelArg<T, U>>(
       deepMapByKeyProducer,
       deepMapByKeyContext,

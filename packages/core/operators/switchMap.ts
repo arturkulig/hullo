@@ -1,7 +1,7 @@
 import { observable, Observable, Observer, Subscription } from "../observable";
 
 export function switchMap<T, U>(xf: (v: T) => Observable<U>) {
-  return function switchMapI(source: Observable<T>) {
+  return function switchMapI(source: Observable<T>): Observable<U> {
     return observable<U, SwitchMapContext<T, U>, SwitchMapArg<T, U>>(
       switchMapProducer,
       switchMapContext,

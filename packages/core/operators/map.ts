@@ -1,7 +1,7 @@
 import { Subscription, Observable, observable, Observer } from "../observable";
 
 export function map<T, U>(xf: (v: T) => U) {
-  return function mapI(source: Observable<T>) {
+  return function mapI(source: Observable<T>): Observable<U> {
     return observable<U, MapContext<T, U>, MapArg<T, U>>(
       mapProducer,
       mapContext,

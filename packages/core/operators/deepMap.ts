@@ -2,7 +2,7 @@ import { Subscription, Observable, observable, Observer } from "../observable";
 import { Atom, atom } from "../atom";
 
 export function deepMap<T, U>(xf: TrackTransform<T, U>) {
-  return function deepMapI(source: Observable<T[]>) {
+  return function deepMapI(source: Observable<T[]>): Observable<U[]> {
     return observable<
       U[],
       OrderedParallelContext<T, U>,

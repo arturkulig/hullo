@@ -13,7 +13,8 @@ for (const index of glob.sync("packages/**/index.ts")) {
       (f: string) =>
         !f.startsWith("index") &&
         !f.includes("node_modules") &&
-        !f.includes(".spec")
+        !f.includes(".spec") &&
+        !f.includes(".d")
     );
 
   fs.writeFileSync(

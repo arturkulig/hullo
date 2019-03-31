@@ -1,5 +1,5 @@
 import { HulloElement, HulloElementDescription, element } from "./element";
-import { Observable } from "../core/observable";
+import { Observable } from "@hullo/core/observable";
 
 type CustomComponent<PROPS extends object> = (p: PROPS) => HulloElement;
 type TagNames = keyof ElementTagNameMap;
