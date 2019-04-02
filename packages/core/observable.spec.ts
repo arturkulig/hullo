@@ -87,30 +87,6 @@ describe("observable", () => {
     expect(result).toEqual([6]);
   });
 
-  describe("of", () => {
-    it("unit", async () => {
-      const result: number[] = [];
-      of(1).subscribe({
-        next: v => {
-          result.push(v);
-        }
-      });
-      await timeout(0);
-      expect(result).toEqual([1]);
-    });
-
-    it("iterable", async () => {
-      const result: number[] = [];
-      of([1, 2, 3]).subscribe({
-        next: v => {
-          result.push(v);
-        }
-      });
-      await timeout(0);
-      expect(result).toEqual([1, 2, 3]);
-    });
-  });
-
   it("acknowledged asynchronously", async () => {
     const result: number[] = [];
     of([1, 2, 3, 4]).subscribe({
@@ -121,6 +97,18 @@ describe("observable", () => {
     });
     await timeout(1000);
     expect(result).toEqual([1, 2, 3, 4]);
+  });
+
+  it("observer can be destructured", async () => {
+    const result: number[] = [];
+    observable<number>(({ next }) => {
+      next(5);
+    }).subscribe({
+      next: v => {
+        result.push(v);
+      }
+    });
+    expect(result).toEqual([5]);
   });
 });
 

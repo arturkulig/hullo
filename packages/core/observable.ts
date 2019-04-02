@@ -100,69 +100,55 @@ function cancelObservableSubscription<T, EXE>(
 }
 
 function observerForProducer<T, EXE, OBS>(
-  _observation: Observation<T, EXE, OBS>
+  observation: Observation<T, EXE, OBS>
 ): Observer<T> {
-  const ofp: ObserverForProducer<T, EXE, OBS> = {
-    _observation,
-    next,
-    complete
-  };
-  return ofp;
-}
+  return { next, complete };
 
-interface ObserverForProducer<T, EXE, OBS> extends Observer<T> {
-  _observation: Observation<T, EXE, OBS>;
-}
+  function next(this: void, value: T): Promise<any> {
+    const { stage, observer, observerContext, sending } = observation;
 
-function next<T, EXE, OBS>(
-  this: ObserverForProducer<T, EXE, OBS>,
-  value: T
-): Promise<any> {
-  const { stage, observer, observerContext, sending } = this._observation;
+    if (stage !== Stage.active || !observer.next) {
+      return Promise.resolve();
+    }
+    // debugger;
 
-  if (stage !== Stage.active || !observer.next) {
-    return Promise.resolve();
-  }
-  // debugger;
+    if (sending) {
+      return sending.then(() => {
+        observation.sending = undefined;
+        return next(value);
+      });
+    }
 
-  if (sending) {
-    return sending.then(() => {
-      this._observation.sending = undefined;
-      return this.next(value);
-    });
+    const nextSending = observer.next.call(observerContext, value) || undefined;
+
+    observation.sending = nextSending;
+
+    return nextSending || Promise.resolve();
   }
 
-  const nextSending = observer.next.call(observerContext, value) || undefined;
+  function complete(this: void): Promise<any> {
+    const { stage, observer, observerContext, sending } = observation;
 
-  this._observation.sending = nextSending;
+    if (stage !== Stage.active || !observer.complete) {
+      return Promise.resolve();
+    }
+    // debugger;
 
-  return nextSending || Promise.resolve();
-}
+    if (sending) {
+      return sending.then(() => {
+        observation.sending = undefined;
+        return complete();
+      });
+    }
 
-function complete<T, EXE, OBS>(
-  this: ObserverForProducer<T, EXE, OBS>
-): Promise<any> {
-  const { stage, observer, observerContext, sending } = this._observation;
+    observation.stage = Stage.completed;
 
-  if (stage !== Stage.active || !observer.complete) {
-    return Promise.resolve();
+    const nextSending = observer.complete.call(observerContext) || undefined;
+
+    observation.sending = nextSending;
+
+    return nextSending || Promise.resolve();
   }
-  // debugger;
-
-  if (sending) {
-    return sending.then(() => {
-      this._observation.sending = undefined;
-      return this.complete();
-    });
-  }
-
-  this._observation.stage = Stage.completed;
-
-  const nextSending = observer.complete.call(observerContext) || undefined;
-
-  this._observation.sending = nextSending;
-
-  return nextSending || Promise.resolve();
 }
 
 enum Stage {
@@ -195,11 +181,6 @@ export interface Observer<T, ObserverContext = any> {
   next(this: ObserverContext, value: T): Promise<any>;
   complete(this: ObserverContext): Promise<any>;
 }
-
-// export interface SkippingObserver<T, ObserverContext = any> {
-//   next: (this: ObserverContext, value: T) => void | Promise<any>;
-//   complete: (this: ObserverContext) => void | Promise<any>;
-// }
 
 export interface Subscriber<T, ObserverContext = any> {
   next?: (this: ObserverContext, value: T) => void | Promise<any>;
