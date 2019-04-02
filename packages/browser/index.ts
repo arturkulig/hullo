@@ -1,5 +1,6 @@
 export * from './fetch'
 export * from './geolocation'
+export * from './location'
 export * from './ofEventTarget'
 export * from './ofMessageChannel'
 export * from './ofWebSocket'
