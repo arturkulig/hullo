@@ -30,6 +30,20 @@ describe("State", () => {
     expect(results).toEqual([0, 1, 2, 4, 6]);
   });
 
+  it("when message is immediately released, default message is omitted from the output", async () => {
+    const result: number[] = [];
+    observable(observer => {
+      observer.next(9);
+    })
+      .pipe(state(1))
+      .subscribe({
+        next: v => {
+          result.push(v);
+        }
+      });
+    expect(result).toEqual([9]);
+  });
+
   it("latter sub gets last value", async () => {
     const s = observable<number>(observer => {
       of([1, 2, 4, 6]).subscribe({
