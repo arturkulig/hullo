@@ -4,3 +4,4 @@ node_modules/
 .cache
 *.ts
 !*.d.ts
+.DS_Store

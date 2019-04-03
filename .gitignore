@@ -6,3 +6,4 @@ node_modules
 *.js
 *.d.ts
 !*config.js
+.DS_Store
