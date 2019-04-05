@@ -193,7 +193,7 @@ export interface Observable<T> {
     observer: Subscriber<T, SubscriberContext>,
     observerContext?: SubscriberContext
   ): Subscription;
-  pipe<U>(transducer: (it: Observable<T>) => Observable<U>): Observable<U>;
+  pipe<U>(transducer: (it: Observable<T>) => U): U;
 }
 
 export interface Producer<T, ExecutionContext = any> {
