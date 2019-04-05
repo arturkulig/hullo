@@ -56,7 +56,7 @@ function next<T, U>(this: OrderedParallelContext<T, U>, list: T[]) {
   let needsToPushOutput = false;
 
   for (let i = 0; i < list.length && i < this.output.length; i++) {
-    if (this.detail$s[i].valueOf() !== list[i]) {
+    if (this.detail$s[i].unwrap() !== list[i]) {
       const delivery = this.detail$s[i].next(list[i]);
       deliveries.push(delivery);
     }
