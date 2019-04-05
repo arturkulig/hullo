@@ -1,12 +1,12 @@
 {
   "name": "@hullo/dom",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "",
   "main": "index.js",
   "scripts": {},
   "author": "Artur Kulig",
   "license": "ISC",
   "dependencies": {
-    "@hullo/core": "^0.1.0"
+    "@hullo/core": "^0.2.0"
   }
 }
