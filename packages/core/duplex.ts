@@ -77,7 +77,7 @@ function subscribe<IN, OUT, ObserverCtx = any>(
 
 function pipe<IN, OUT, U>(
   this: HulloDuplex<IN, OUT>,
-  transducer: (v: Observable<OUT>) => Observable<U>
-): Observable<U> {
+  transducer: (v: Observable<OUT>) => U
+): U {
   return this.observable.pipe(transducer);
 }
