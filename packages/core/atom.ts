@@ -9,8 +9,17 @@ export function atom<T>(initial: T): Atom<T> {
     atomContext,
     wide
   ).pipe(state(initial));
-  const observer = observerForAtom(wide);
-  return duplex(o, observer);
+  return Object.assign(
+    duplex<T, AtomWideContext<T>, T>(o, { next, complete }, wide),
+    {
+      valueOf(): T {
+        return o.valueOf() as T;
+      },
+      unwrap(): T {
+        return o.unwrap();
+      }
+    }
+  );
 }
 
 function atomContext<T>(arg: AtomWideContext<T>): AtomContext<T> {
@@ -27,27 +36,17 @@ function atomCancel<T>(this: AtomContext<T>) {
   this.wide.remote = undefined;
 }
 
-function observerForAtom<T>(_wide: AtomWideContext<T>): Observer<T> {
-  const o: AtomObserver<T> = {
-    _wide,
-    next,
-    complete
-  };
-  return o;
+function next<T>(this: AtomWideContext<T>, value: T) {
+  return this.remote ? this.remote.next(value) : Promise.resolve();
 }
 
-function next<T>(this: AtomObserver<T>, value: T) {
-  return this._wide.remote ? this._wide.remote.next(value) : Promise.resolve();
+function complete<T>(this: AtomWideContext<T>) {
+  return this.remote ? this.remote.complete() : Promise.resolve();
 }
 
-function complete<T>(this: AtomObserver<T>) {
-  return this._wide.remote ? this._wide.remote.complete() : Promise.resolve();
-}
-
-export interface Atom<T> extends Duplex<T, T> {}
-
-interface AtomObserver<T> extends Observer<T> {
-  _wide: AtomWideContext<T>;
+export interface Atom<T> extends Duplex<T, T> {
+  valueOf(): T;
+  unwrap(): T;
 }
 
 interface AtomWideContext<T> {

@@ -8,6 +8,15 @@ import {
 
 const duplexSymbol = Symbol("is Duplex");
 
+export function duplex<IN, INCTX, OUT>(
+  observable: Observable<OUT>,
+  observer: Observer<IN, INCTX>,
+  observerContext?: INCTX
+): Duplex<IN, OUT>;
+export function duplex<IN, OUT>(
+  observable: Observable<OUT>,
+  observer: Observer<IN>
+): Duplex<IN, OUT>;
 export function duplex<IN, OUT>(
   observable: Observable<OUT>,
   observer: Observer<IN>,

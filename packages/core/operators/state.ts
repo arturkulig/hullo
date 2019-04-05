@@ -1,8 +1,7 @@
 import { observable, Observer, Observable, Subscription } from "../observable";
 
 type StateWideContext<T> = {
-  initial: T;
-  last?: T;
+  last: T;
   sourceSub: Subscription | undefined;
   source: Observable<T>;
   clients: StateContext<T>[] | undefined;
@@ -17,9 +16,9 @@ interface StateContext<T> {
 export function state<T>(initial: T) {
   return function stateI(
     source: Observable<T>
-  ): Observable<T> & { valueOf(): T } {
+  ): Observable<T> & { valueOf(): T; unwrap(): T } {
     const wideContext: StateWideContext<T> = {
-      initial,
+      last: initial,
       source,
       sourceSub: undefined,
       clients: undefined
@@ -32,9 +31,10 @@ export function state<T>(initial: T) {
       ),
       {
         valueOf(): T {
-          return "last" in wideContext
-            ? wideContext!.last!
-            : wideContext.initial;
+          return wideContext.last;
+        },
+        unwrap(): T {
+          return wideContext.last;
         }
       }
     );
@@ -55,6 +55,7 @@ function subjectProduce<T>(this: StateContext<T>, observer: Observer<T>) {
     this.wide.clients = [];
   }
   this.wide.clients.push(this);
+
   Promise.resolve(this).then(sendInitial);
 
   this.wide.sourceSub =
@@ -66,9 +67,7 @@ function subjectProduce<T>(this: StateContext<T>, observer: Observer<T>) {
 function sendInitial<T>(context: StateContext<T>) {
   if (context.initialValueScheduled) {
     context.initialValueScheduled = false;
-    context.observer!.next(
-      "last" in context.wide ? context.wide.last! : context.wide.initial
-    );
+    context.observer!.next(context.wide.last);
   }
 }
 
