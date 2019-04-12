@@ -54,7 +54,10 @@ describe("channel", () => {
     await Promise.all([
       (async () => {
         try {
-          while (true) result.push(await ch.take());
+          while (true) {
+            result.push(await ch.take());
+            await timeout(0);
+          }
         } catch {
           result.push(null);
         }
@@ -63,7 +66,6 @@ describe("channel", () => {
         await ch.next(3);
         await ch.next(4);
         await ch.complete();
-
         await ch.next(5);
       })()
     ]);
@@ -85,13 +87,13 @@ describe("channel", () => {
             return;
           }
           result.push(next.value);
+          await timeout(0);
         }
       })(),
       (async () => {
         await ch.next(3);
         await ch.next(4);
         await ch.complete();
-
         await ch.next(5);
       })()
     ]);
