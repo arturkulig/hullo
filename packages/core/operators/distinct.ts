@@ -76,6 +76,7 @@ function distinctProducer<T>(this: DistinctContext<T>, observer: Observer<T>) {
       complete: distinctComplete
     },
     {
+      hasLast: false,
       compare: this.compare,
       observer
     }
