@@ -72,7 +72,8 @@ class BroadcastObserver<T> implements Observer<T, BroadcastObserver<T>> {
 
   complete() {
     const deliveries: Promise<void>[] = [];
-    const { observers } = this._wide;
+    this._wide.sourceSub = undefined;
+    const observers = this._wide.observers.splice(0);
     for (let i = 0, l = observers.length; i < l; i++) {
       const delivery = observers[i].complete();
       deliveries.push(delivery);

@@ -3,7 +3,7 @@ import { Observer, observable } from "./observable";
 import { state } from "./operators/state";
 
 export function atom<T>(initial: T): Atom<T> {
-  const wide: AtomWideContext<T> = { remote: undefined };
+  const wide: AtomWideContext<T> = { closed: false, remote: undefined };
   const o = observable<T, AtomContext<T>, AtomWideContext<T>>(
     atomProduce,
     atomContext,
@@ -27,9 +27,12 @@ function atomContext<T>(arg: AtomWideContext<T>): AtomContext<T> {
 }
 
 function atomProduce<T>(this: AtomContext<T>, observer: Observer<T>) {
-  this.wide.remote = observer;
-
-  return atomCancel;
+  if (this.wide.closed) {
+    observer.complete();
+  } else {
+    this.wide.remote = observer;
+    return atomCancel;
+  }
 }
 
 function atomCancel<T>(this: AtomContext<T>) {
@@ -37,10 +40,17 @@ function atomCancel<T>(this: AtomContext<T>) {
 }
 
 function next<T>(this: AtomWideContext<T>, value: T) {
+  if (this.closed) {
+    return Promise.resolve();
+  }
   return this.remote ? this.remote.next(value) : Promise.resolve();
 }
 
 function complete<T>(this: AtomWideContext<T>) {
+  if (this.closed) {
+    return Promise.resolve();
+  }
+  this.closed = true;
   return this.remote ? this.remote.complete() : Promise.resolve();
 }
 
@@ -50,6 +60,7 @@ export interface Atom<T> extends Duplex<T, T> {
 }
 
 interface AtomWideContext<T> {
+  closed: boolean;
   remote: Observer<T> | undefined;
 }
 

@@ -22,7 +22,7 @@ export function duplex<IN, OUT>(
   observer: Observer<IN>,
   observerContext?: any
 ): Duplex<IN, OUT> {
-  const d: HulloDuplex<IN, OUT> = {
+  const d: PrivateDuplex<IN, OUT> = {
     [observableSymbol]: true as true,
     [duplexSymbol]: true as true,
 
@@ -39,7 +39,7 @@ export function duplex<IN, OUT>(
   return d;
 }
 
-interface HulloDuplex<IN, OUT> extends Duplex<IN, OUT> {
+interface PrivateDuplex<IN, OUT> extends Duplex<IN, OUT> {
   observable: Observable<OUT>;
   observer: Observer<IN, any>;
   observerContext: any;
@@ -49,26 +49,26 @@ export interface Duplex<IN, OUT> extends Observable<OUT>, Observer<IN> {
   [duplexSymbol]: true;
 }
 
-function next<IN, OUT>(this: HulloDuplex<IN, OUT>, value: IN) {
+function next<IN, OUT>(this: PrivateDuplex<IN, OUT>, value: IN) {
   return this.observer.next.call(this.observerContext, value);
 }
 
-function complete<IN, OUT>(this: HulloDuplex<IN, OUT>) {
+function complete<IN, OUT>(this: PrivateDuplex<IN, OUT>) {
   return this.observer.complete.call(this.observerContext);
 }
 
 function subscribe<IN, OUT, ObserverCtx = any>(
-  this: HulloDuplex<IN, OUT>,
+  this: PrivateDuplex<IN, OUT>,
   observer: Subscriber<OUT, ObserverCtx>,
   observerContext?: ObserverCtx
 ): Subscription;
 function subscribe<IN, OUT, ObserverCtx = any>(
-  this: HulloDuplex<IN, OUT>,
+  this: PrivateDuplex<IN, OUT>,
   observer: Subscriber<OUT, ObserverCtx>,
   observerContext?: ObserverCtx
 ): Subscription;
 function subscribe<IN, OUT, ObserverCtx = any>(
-  this: HulloDuplex<IN, OUT>,
+  this: PrivateDuplex<IN, OUT>,
   observer: Subscriber<OUT, ObserverCtx>,
   observerContext?: ObserverCtx
 ): Subscription {
@@ -76,7 +76,7 @@ function subscribe<IN, OUT, ObserverCtx = any>(
 }
 
 function pipe<IN, OUT, U>(
-  this: HulloDuplex<IN, OUT>,
+  this: PrivateDuplex<IN, OUT>,
   transducer: (v: Observable<OUT>) => U
 ): U {
   return this.observable.pipe(transducer);
