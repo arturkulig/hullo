@@ -1,25 +1,11 @@
-import { observable } from "@hullo/core/observable";
+import { map } from "@hullo/core/operators/map";
+import { merge } from "@hullo/core/operators/merge";
+import { state } from "@hullo/core/operators/state";
+import { ofEventTarget } from "./ofEventTarget";
 
 export function onLine() {
-  return observable<boolean>(observer => {
-    observer.next(window.navigator.onLine);
-
-    window.addEventListener("offline", handleOffline);
-    window.addEventListener("online", handleOnline);
-
-    return cancel;
-
-    function cancel() {
-      window.removeEventListener("offline", handleOffline);
-      window.removeEventListener("online", handleOnline);
-    }
-
-    function handleOffline() {
-      observer.next(false);
-    }
-
-    function handleOnline() {
-      observer.next(true);
-    }
-  });
+  return ofEventTarget(window, "online")
+    .pipe(map(() => true))
+    .pipe(merge(ofEventTarget(window, "offline").pipe(map(() => false))))
+    .pipe(state<boolean>(navigator.onLine));
 }

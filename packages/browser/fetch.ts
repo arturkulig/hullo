@@ -1,91 +1,129 @@
 import { observable, Observable } from "@hullo/core/observable";
 
-type Response<T extends { [id: number]: any }> = {
-  [K in keyof T]: {
-    status: K;
-    statusText: string;
-    headers: Headers;
-    arrayBuffer: ArrayBuffer;
-    blob: Blob;
-    formData: FormData;
-    json: T[K];
-    text: string;
-  }
-}[keyof T];
+type ResponseOf<JSONType extends { [id: number]: any }> = {
+  status: keyof JSONType;
+  statusText: string;
+  headers: Headers;
+};
 
-export enum BodyType {
-  arrayBuffer = "arrayBuffer",
-  blob = "blob",
-  formData = "formData",
-  json = "json",
-  text = "text"
+export { fetch$ as fetch };
+
+function fetch$<JSONType extends { [id: number]: any } = { [id: number]: any }>(
+  input: RequestInfo,
+  init: RequestInit = {}
+) {
+  return getFetcher<JSONType, ResponseOf<JSONType>>(
+    input,
+    init,
+    async response =>
+      ({
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      } as ResponseOf<JSONType>)
+  );
 }
 
-/**
- *
- * Example:
- * fetch<{ 200: number; 404: null }>("ulala", {}, BodyType.json)
- *  .subscribe({
- *    next: v => {
- *       switch (v.status) {
- *         case 200:
- *           console.log(v.json);
- *           break;
- *         case 404:
- *           console.log(v.json);
- *           break;
- *       }
- *     }
- *   });
- */
-export function fetch<T extends { [id: number]: any }>(
-  options: RequestInfo,
+export function fetchWithJSON<
+  JSONType extends { [id: number]: any } = { [id: number]: any }
+>(input: RequestInfo, init: RequestInit) {
+  return fetch$<JSONType>(input, init).withJSON();
+}
+
+export function fetchWithArrayBuffer<
+  JSONType extends { [id: number]: any } = { [id: number]: any }
+>(input: RequestInfo, init: RequestInit) {
+  return fetch$<JSONType>(input, init).withArrayBuffer();
+}
+
+export function fetchWithBlob<
+  JSONType extends { [id: number]: any } = { [id: number]: any }
+>(input: RequestInfo, init: RequestInit) {
+  return fetch$<JSONType>(input, init).withBlob();
+}
+
+export function fetchWithText<
+  JSONType extends { [id: number]: any } = { [id: number]: any }
+>(input: RequestInfo, init: RequestInit) {
+  return fetch$<JSONType>(input, init).withText();
+}
+
+export function fetchWithFormData<
+  JSONType extends { [id: number]: any } = { [id: number]: any }
+>(input: RequestInfo, init: RequestInit) {
+  return fetch$<JSONType>(input, init).withFormData();
+}
+
+export function fetchWithJSONAndText<
+  JSONType extends { [id: number]: any } = { [id: number]: any }
+>(input: RequestInfo, init: RequestInit) {
+  return fetch$<JSONType>(input, init)
+    .withText()
+    .withJSON();
+}
+
+function getFetcher<JSONType extends { [id: number]: any }, T>(
+  input: RequestInfo,
   init: RequestInit,
-  outputs: BodyType = BodyType.json
-): Observable<Response<T>> {
-  return observable<Response<T>>(async observer => {
-    const response = await window.fetch(options, init);
-    const hulloResponse: Response<T> = {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-      ...((outputs === BodyType.arrayBuffer
-        ? { arrayBuffer: await response.arrayBuffer() }
-        : {
-            get arrayBuffer() {
-              throw new Error();
-            }
-          }) as any),
-      ...((outputs === BodyType.blob
-        ? { blob: await response.blob() }
-        : {
-            get blob() {
-              throw new Error();
-            }
-          }) as any),
-      ...((outputs === BodyType.formData
-        ? { formData: await response.formData() }
-        : {
-            get formData() {
-              throw new Error();
-            }
-          }) as any),
-      ...((outputs === BodyType.json
-        ? { json: await response.json() }
-        : {
-            get json() {
-              throw new Error();
-            }
-          }) as any),
-      ...((outputs === BodyType.text
-        ? { text: await response.text() }
-        : {
-            get text() {
-              throw new Error();
-            }
-          }) as any)
+  process: (response: Response) => Promise<T>
+): FetchExtend<JSONType, T> {
+  const stream = observable<T>(observer => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+    fetch(input, { ...init, signal }).then(response =>
+      process(response)
+        .then(observer.next)
+        .then(observer.complete)
+    );
+    return () => {
+      controller.abort();
     };
-    await observer.next(hulloResponse);
-    await observer.complete();
   });
+
+  const furtherProcessors = {
+    withArrayBuffer: () =>
+      getFetcher(input, init, async response => ({
+        ...(await process(response)),
+        arrayBuffer: await response.arrayBuffer()
+      })),
+    withBlob: () =>
+      getFetcher(input, init, async response => ({
+        ...(await process(response)),
+        blob: await response.blob()
+      })),
+    withText: () =>
+      getFetcher(input, init, async response => ({
+        ...(await process(response)),
+        text: await response.text()
+      })),
+    withFormData: () =>
+      getFetcher(input, init, async response => ({
+        ...(await process(response)),
+        formData: await response.formData()
+      })),
+    withJSON: () =>
+      getFetcher(input, init, async response => ({
+        ...(await process(response)),
+        json: await response.json()
+      }))
+  };
+  return Object.assign(stream, furtherProcessors);
 }
+
+type FetchExtend<JSONType extends { [id: number]: any }, T> = Observable<T> & {
+  withArrayBuffer(): FetchExtend<JSONType, T & { arrayBuffer: ArrayBuffer }>;
+  withBlob(): FetchExtend<JSONType, T & { blob: Blob }>;
+  withText(): FetchExtend<JSONType, T & { text: string }>;
+  withFormData(): FetchExtend<JSONType, T & { formData: FormData }>;
+  withJSON(): FetchExtend<
+    JSONType,
+    T &
+      (Pick<T, Exclude<keyof T, "status">> &
+        ({
+          [status in keyof JSONType]: {
+            status: status;
+            json: JSONType[status];
+          }
+        })[keyof JSONType])
+  >;
+};

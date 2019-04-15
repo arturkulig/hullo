@@ -1,12 +1,13 @@
 import { Duplex, duplex } from "@hullo/core/duplex";
 import { channel } from "@hullo/core/channel";
 
-export async function ofWebSocket(
+export function ofWebSocket(
   ws: WebSocket
-): Promise<Duplex<WebSocketData, WebSocketEvent>> {
-  const ch = channel<WebSocketEvent>();
+): Duplex<WebSocketData, WebSocketData> {
+  const ch = channel<WebSocketData>();
 
-  let open = false;
+  let connected = false;
+  let closed = false;
   const queue: Array<
     | { done: true; ack: () => any }
     | { done: false; data: WebSocketData; ack: () => any }
@@ -22,26 +23,34 @@ export async function ofWebSocket(
       }
       entry.ack();
     }
+    connected = true;
     queue.splice(0);
-    open = true;
 
     ws.addEventListener("message", msgEvent => {
-      ch.next({ ok: true, data: msgEvent.data });
+      ch.next(msgEvent.data);
     });
 
     ws.addEventListener("error", () => {
-      ch.next({ ok: false });
+      closed = true;
       ch.complete();
     });
 
     ws.addEventListener("close", () => {
+      closed = true;
       ch.complete();
     });
   });
 
-  return duplex<WebSocketData, WebSocketEvent>(ch, {
+  return duplex<WebSocketData, WebSocketData>(ch, {
+    get closed() {
+      return closed;
+    },
+
     next(v: WebSocketData) {
-      if (open) {
+      if (closed) {
+        return Promise.resolve();
+      }
+      if (connected) {
         ws.send(v);
         return Promise.resolve();
       } else {
@@ -50,8 +59,13 @@ export async function ofWebSocket(
         });
       }
     },
+
     complete() {
-      if (open) {
+      if (closed) {
+        return Promise.resolve();
+      }
+      closed = true;
+      if (connected) {
         ws.close();
         return Promise.resolve();
       } else {
@@ -62,8 +76,6 @@ export async function ofWebSocket(
     }
   });
 }
-
-type WebSocketEvent = { ok: true; data: WebSocketData } | { ok: false };
 
 type WebSocketData =
   | string

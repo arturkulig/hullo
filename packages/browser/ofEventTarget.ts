@@ -1,15 +1,15 @@
 import { observable } from "@hullo/core/observable";
 import { duplex } from "@hullo/core/duplex";
 
-export function ofEventTarget(
+export function ofEventTarget<VALUE_EVENT_META = void>(
   emitter: EventTarget,
   valueName: string,
   completionName?: string
 ) {
-  return duplex<Event, Event>(
-    observable<Event>(observer => {
+  return duplex<VALUE_EVENT_META, Event & VALUE_EVENT_META>(
+    observable<Event & VALUE_EVENT_META>(observer => {
       function next(event: Event) {
-        observer.next(event);
+        observer.next(event as Event & VALUE_EVENT_META);
       }
       function complete() {
         observer.complete();
@@ -28,10 +28,19 @@ export function ofEventTarget(
       };
     }),
     {
-      next(event: Event) {
-        emitter.dispatchEvent(event);
+      get closed() {
+        return false;
+      },
+
+      next(meta: VALUE_EVENT_META) {
+        emitter.dispatchEvent(
+          meta == null
+            ? new Event(valueName)
+            : Object.assign(new Event(valueName), meta)
+        );
         return Promise.resolve();
       },
+
       complete() {
         return Promise.resolve();
       }

@@ -58,6 +58,10 @@ function subjectCancel<T>(this: SubjectContext<T>) {
 }
 
 class BroadcastObserver<T> implements Observer<T, BroadcastObserver<T>> {
+  get closed() {
+    return this._wide.observers.length > 0;
+  }
+
   constructor(private _wide: SubjectWideContext<T>) {}
 
   next(value: T) {

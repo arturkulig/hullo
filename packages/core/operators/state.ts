@@ -4,7 +4,7 @@ type StateWideContext<T> = {
   last: T;
   sourceSub: Subscription | undefined;
   source: Observable<T>;
-  clients: StateContext<T>[] | undefined;
+  observers: StateContext<T>[];
 };
 
 interface StateContext<T> {
@@ -13,15 +13,18 @@ interface StateContext<T> {
   initialValueScheduled: boolean;
 }
 
+export interface State<T> extends Observable<T> {
+  valueOf(): T;
+  unwrap(): T;
+}
+
 export function state<T>(initial: T) {
-  return function stateI(
-    source: Observable<T>
-  ): Observable<T> & { valueOf(): T; unwrap(): T } {
+  return function stateI(source: Observable<T>): State<T> {
     const wideContext: StateWideContext<T> = {
       last: initial,
       source,
       sourceSub: undefined,
-      clients: undefined
+      observers: []
     };
     return Object.assign(
       observable<T, StateContext<T>, StateWideContext<T>>(
@@ -51,10 +54,10 @@ function subjectContext<T>(arg: StateWideContext<T>): StateContext<T> {
 
 function subjectProduce<T>(this: StateContext<T>, observer: Observer<T>) {
   this.observer = observer;
-  if (this.wide.clients == undefined) {
-    this.wide.clients = [];
+  if (this.wide.observers == undefined) {
+    this.wide.observers = [];
   }
-  this.wide.clients.push(this);
+  this.wide.observers.push(this);
 
   Promise.resolve(this).then(sendInitial);
 
@@ -75,11 +78,11 @@ function subjectCancel<T>(this: StateContext<T>) {
   if (!this.observer) {
     return;
   }
-  if (this.wide.clients != undefined) {
-    const pos = this.wide.clients.indexOf(this);
+  if (this.wide.observers != undefined) {
+    const pos = this.wide.observers.indexOf(this);
     if (pos >= 0) {
-      this.wide.clients.splice(pos, 1);
-      if (this.wide.clients.length === 0) {
+      this.wide.observers.splice(pos, 1);
+      if (this.wide.observers.length === 0) {
         const { sourceSub } = this.wide;
         this.wide.sourceSub = undefined;
         if (sourceSub && !sourceSub.closed) {
@@ -91,18 +94,22 @@ function subjectCancel<T>(this: StateContext<T>) {
 }
 
 class BroadcastObserver<T> implements Observer<T, BroadcastObserver<T>> {
-  constructor(private _wideContext: StateWideContext<T>) {}
+  get closed() {
+    return this._wide.observers.length > 0;
+  }
+
+  constructor(private _wide: StateWideContext<T>) {}
 
   next(value: T) {
-    this._wideContext.last = value;
+    this._wide.last = value;
     const deliveries: Promise<void>[] = [];
-    const { clients } = this._wideContext;
-    if (clients != undefined) {
-      for (let i = 0, l = clients.length; i < l; i++) {
-        clients[i].initialValueScheduled = false;
+    const { observers } = this._wide;
+    if (observers != undefined) {
+      for (let i = 0, l = observers.length; i < l; i++) {
+        observers[i].initialValueScheduled = false;
       }
-      for (let i = 0, l = clients.length; i < l; i++) {
-        const delivery = clients[i].observer!.next(value);
+      for (let i = 0, l = observers.length; i < l; i++) {
+        const delivery = observers[i].observer!.next(value);
         deliveries.push(delivery);
       }
     }
@@ -111,11 +118,11 @@ class BroadcastObserver<T> implements Observer<T, BroadcastObserver<T>> {
 
   complete() {
     const deliveries: Promise<void>[] = [];
-    const { clients } = this._wideContext;
-    this._wideContext.clients = undefined;
-    if (clients != undefined) {
-      for (let i = 0, l = clients.length; i < l; i++) {
-        const delivery = clients[i].observer!.complete();
+    const { observers } = this._wide;
+    this._wide.observers = [];
+    if (observers != undefined) {
+      for (let i = 0, l = observers.length; i < l; i++) {
+        const delivery = observers[i].observer!.complete();
         deliveries.push(delivery);
       }
     }

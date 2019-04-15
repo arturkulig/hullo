@@ -26,6 +26,10 @@ export function duplex<IN, OUT>(
     [observableSymbol]: true as true,
     [duplexSymbol]: true as true,
 
+    get closed() {
+      return observer.closed;
+    },
+
     observer,
     observable,
     observerContext,

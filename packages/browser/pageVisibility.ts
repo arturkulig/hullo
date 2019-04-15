@@ -1,27 +1,9 @@
-import { observable } from "@hullo/core/observable";
+import { ofEventTarget } from "./ofEventTarget";
+import { map } from "@hullo/core/operators/map";
+import { state } from "@hullo/core/operators/state";
 
 export function pageVisibility() {
-  return observable<VisibilityState>(observer => {
-    observer.next(document.visibilityState);
-
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibilityChange,
-      false
-    );
-
-    return cancel;
-
-    function cancel() {
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange,
-        false
-      );
-    }
-
-    function handleVisibilityChange() {
-      observer.next(document.visibilityState);
-    }
-  });
+  return ofEventTarget(window.document, "visibilitychange")
+    .pipe(map(() => document.visibilityState))
+    .pipe(state(document.visibilityState));
 }

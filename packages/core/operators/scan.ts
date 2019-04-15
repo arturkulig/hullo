@@ -45,6 +45,10 @@ function scanProduce<T, U>(this: ScanContext<T, U>, observer: Observer<U>) {
 }
 
 class ScanObserver<T, U> implements Observer<T> {
+  get closed() {
+    return this._context.targetObserver == null;
+  }
+
   constructor(private _context: ScanContext<T, U>) {}
 
   next(value: T) {
@@ -58,6 +62,8 @@ class ScanObserver<T, U> implements Observer<T> {
 }
 
 function scanCancel<T, U>(this: ScanContext<T, U>) {
+  this.targetObserver = null;
+
   if (this.sourceSub) {
     const { sourceSub } = this;
     this.sourceSub = null;

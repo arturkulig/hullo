@@ -102,7 +102,13 @@ function cancelObservableSubscription<T, EXE>(
 function observerForProducer<T, EXE, OBS>(
   observation: Observation<T, EXE, OBS>
 ): Observer<T> {
-  return { next, complete };
+  return {
+    get closed() {
+      return observation.stage !== Stage.active;
+    },
+    next,
+    complete
+  };
 
   function next(this: void, value: T): Promise<any> {
     const { stage, observer, observerContext, sending } = observation;
@@ -174,10 +180,11 @@ interface Cancellation<ExecutionContext> {
   (this: ExecutionContext): void;
 }
 export interface Subscription {
-  closed: boolean;
+  readonly closed: boolean;
   cancel(): void;
 }
 export interface Observer<T, ObserverContext = any> {
+  readonly closed: boolean;
   next(this: ObserverContext, value: T): Promise<any>;
   complete(this: ObserverContext): Promise<any>;
 }

@@ -16,20 +16,33 @@ export function channel<T>(this: unknown): Channel<T> {
     wide
   ).pipe(subject);
 
-  return Object.assign(duplex(o, { next, complete }, wide), {
-    take(this: unknown) {
-      return new Promise<T>((resolve, reject) => {
-        wide.nextUnsafeHandlers.push({ resolve, reject });
-        Promise.resolve(wide).then(flushBuffer);
-      });
-    },
-    tryTake(this: unknown) {
-      return new Promise<ChannelMessage<T>>(resolve => {
-        wide.nextSafeHandlers.push(resolve);
-        Promise.resolve(wide).then(flushBuffer);
-      });
+  return Object.assign(
+    duplex(
+      o,
+      {
+        get closed() {
+          return wide.closed;
+        },
+        next,
+        complete
+      },
+      wide
+    ),
+    {
+      take(this: unknown) {
+        return new Promise<T>((resolve, reject) => {
+          wide.nextUnsafeHandlers.push({ resolve, reject });
+          Promise.resolve(wide).then(flushBuffer);
+        });
+      },
+      tryTake(this: unknown) {
+        return new Promise<ChannelMessage<T>>(resolve => {
+          wide.nextSafeHandlers.push(resolve);
+          Promise.resolve(wide).then(flushBuffer);
+        });
+      }
     }
-  });
+  );
 }
 
 function channelContext<T>(arg: ChannelWideContext<T>): ChannelContext<T> {

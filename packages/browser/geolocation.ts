@@ -13,7 +13,7 @@ interface PositionFailure {
 type PositionResult = PositionSuccess | PositionFailure;
 
 export function geolocation(options: PositionOptions) {
-  if ("geolocation" in navigator) {
+  if (typeof navigator === "object" && "geolocation" in navigator) {
     return observable<PositionResult>(observer => {
       const watchId = navigator.geolocation.watchPosition(
         function onGeoSuccess(position: Position) {

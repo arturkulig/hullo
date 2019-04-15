@@ -90,6 +90,10 @@ function combineLatestCancel<T extends any[]>(this: CombineLatestContext<T>) {
 
 class CombineLatestEntryObserver<T extends any[]>
   implements Observer<T[keyof T], CombineLatestEntryObserver<T>> {
+  get closed() {
+    return this._context.closed;
+  }
+
   constructor(
     private _context: CombineLatestContext<T>,
     private _position: number

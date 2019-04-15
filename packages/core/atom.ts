@@ -10,7 +10,17 @@ export function atom<T>(initial: T): Atom<T> {
     wide
   ).pipe(state(initial));
   return Object.assign(
-    duplex<T, AtomWideContext<T>, T>(o, { next, complete }, wide),
+    duplex<T, AtomWideContext<T>, T>(
+      o,
+      {
+        get closed() {
+          return wide.closed;
+        },
+        next,
+        complete
+      },
+      wide
+    ),
     {
       valueOf(): T {
         return o.valueOf() as T;

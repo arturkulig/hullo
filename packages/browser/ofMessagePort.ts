@@ -1,15 +1,18 @@
-import { Duplex, duplex, observable, subject } from "@hullo/core";
+import { observable } from "@hullo/core/observable";
+import { Duplex, duplex } from "@hullo/core/duplex";
+import { subject } from "@hullo/core/operators/subject";
 
-export async function ofMessagePort<IN = any, OUT = any>(
+export function ofMessagePort<IN = any, OUT = any>(
   port: MessagePort
-): Promise<Duplex<MessageChannelData<IN>, MessageChannelEvent<OUT>>> {
-  let isOpen = false;
+): Duplex<MessageChannelData<IN>, OUT> {
+  let connected = false;
+  let closed = false;
   const queue: Array<
     | { done: true; ack: () => any }
     | { done: false; data: MessageChannelData<IN>; ack: () => any }
   > = [];
 
-  return duplex<MessageChannelData<IN>, MessageChannelEvent<OUT>>(
+  return duplex<MessageChannelData<IN>, OUT>(
     observable(observer => {
       port.addEventListener("open", open);
 
@@ -34,8 +37,8 @@ export async function ofMessagePort<IN = any, OUT = any>(
           }
           entry.ack();
         }
+        connected = true;
         queue.splice(0);
-        isOpen = true;
 
         port.addEventListener("message", message);
         port.addEventListener("error", error);
@@ -43,15 +46,16 @@ export async function ofMessagePort<IN = any, OUT = any>(
       }
 
       function message(msgEvent: MessageEvent) {
-        observer.next({ ok: true, message: msgEvent.data });
+        observer.next(msgEvent.data);
       }
 
       function error() {
-        observer.next({ ok: false });
+        closed = true;
         observer.complete();
       }
 
       function close() {
+        closed = true;
         observer.complete();
       }
 
@@ -63,18 +67,17 @@ export async function ofMessagePort<IN = any, OUT = any>(
       }
     }).pipe(subject),
     {
+      get closed() {
+        return closed;
+      },
+
       next(v: MessageChannelData<IN>) {
-        if (isOpen) {
-          if (
-            typeof v === "object" &&
-            v &&
-            "message" in v &&
-            "transferable" in v
-          ) {
-            port.postMessage(v.message, v.transferable);
-          } else {
-            port.postMessage(v);
-          }
+        if (closed) {
+          return Promise.resolve();
+        }
+        if (connected) {
+          port.postMessage(v.message, v.transferable);
+
           return Promise.resolve();
         } else {
           return new Promise<void>(r => {
@@ -82,8 +85,13 @@ export async function ofMessagePort<IN = any, OUT = any>(
           });
         }
       },
+
       complete() {
-        if (isOpen) {
+        if (closed) {
+          return Promise.resolve();
+        }
+        closed = true;
+        if (connected) {
           port.close();
           return Promise.resolve();
         } else {
@@ -96,11 +104,7 @@ export async function ofMessagePort<IN = any, OUT = any>(
   );
 }
 
-type MessageChannelEvent<T> = { ok: true; message: T } | { ok: false };
-
-type MessageChannelData<T> =
-  | T
-  | {
-      message: T;
-      transferable: Transferable[];
-    };
+interface MessageChannelData<T> {
+  message: T;
+  transferable?: Transferable[];
+}
