@@ -26,17 +26,19 @@ export interface DOMElement extends DOMElementDesc {
 const emptyProps: {} = {};
 const emptyChildren: [] = [];
 
-export const element = (
+export function element(
   tagName: string,
   desc: Partial<DOMElementDesc>,
   children2?: DOMChildren
-): DOMElement => ({
-  tagName,
-  attrs: emptyProps,
-  props: emptyProps,
-  style: emptyProps,
-  events: emptyProps,
-  children: emptyChildren,
-  ...desc,
-  ...(children2 ? { children: children2 } : emptyProps)
-});
+): DOMElement {
+  return {
+    tagName,
+    attrs: emptyProps,
+    props: emptyProps,
+    style: emptyProps,
+    events: emptyProps,
+    children: emptyChildren,
+    ...desc,
+    ...(children2 ? { children: children2 } : emptyProps)
+  };
+}
