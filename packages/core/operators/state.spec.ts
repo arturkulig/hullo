@@ -6,6 +6,7 @@ import { Observer, observable } from "../observable";
 describe("State", () => {
   it("regular", async () => {
     let remoteObserver: Observer<number> = {
+      closed: false,
       next: _n => Promise.resolve(),
       complete: () => Promise.resolve()
     };

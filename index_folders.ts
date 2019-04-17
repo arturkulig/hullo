@@ -2,7 +2,9 @@ import glob from "glob";
 import path from "path";
 import fs from "fs";
 
-for (const index of glob.sync("packages/**/index.ts")) {
+for (const index of glob.sync("packages/**/index.ts", {
+  ignore: "node_modules"
+})) {
   const files = glob
     .sync("*.ts", { cwd: path.dirname(index) })
     .map(file => path.join(path.dirname(file), path.basename(file, ".ts")))

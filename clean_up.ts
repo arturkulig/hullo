@@ -3,17 +3,17 @@ import path from "path";
 import fs from "fs";
 
 const tss = glob
-  .sync("packages/**/*.ts")
+  .sync("packages/**/*.ts", { ignore: ["packages/*/node_modules"] })
   .map(f => path.join(path.dirname(f), path.basename(f, ".ts")))
   .filter(f => !f.includes("node_modules"));
 
 const jss = glob
-  .sync("packages/**/*.js")
+  .sync("packages/**/*.js", { ignore: ["packages/*/node_modules"] })
   .map(f => path.join(path.dirname(f), path.basename(f, ".js")))
   .filter(f => !f.includes("node_modules"));
 
 const dts = glob
-  .sync("packages/**/*.d.ts")
+  .sync("packages/**/*.d.ts", { ignore: ["packages/*/node_modules"] })
   .map(f => path.join(path.dirname(f), path.basename(f, ".d.ts")))
   .filter(f => !f.includes("node_modules"));
 

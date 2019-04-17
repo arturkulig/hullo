@@ -9,6 +9,7 @@ describe("observable", () => {
     const results2: number[] = [];
 
     let remoteObserver: Observer<number> = {
+      closed: false,
       next: () => Promise.resolve(),
       complete: () => Promise.resolve()
     };
@@ -18,6 +19,7 @@ describe("observable", () => {
       remoteObserver = observer;
       return () => {
         remoteObserver = {
+          closed: false,
           next: () => Promise.resolve(),
           complete: () => Promise.resolve()
         };

@@ -5,5 +5,8 @@
   "main": "index.js",
   "scripts": {},
   "author": "Artur Kulig",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^3.4.3"
+  }
 }
