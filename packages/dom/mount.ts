@@ -1,7 +1,7 @@
 import { render } from "./render";
-import { HulloElement } from "./element";
+import { DOMElement } from "./element";
 
-export function mount(mount: HTMLElement, app: HulloElement) {
+export function mount(mount: HTMLElement, app: DOMElement) {
   const { element, possesion } = render(app);
   mount.appendChild(element);
   return () => {

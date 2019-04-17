@@ -1,4 +1,4 @@
-import { HulloElement, SyncMode } from "./element";
+import { DOMElement, SyncMode } from "./element";
 import {
   Observer,
   Observable,
@@ -15,19 +15,19 @@ interface Possesion<CTX = any> {
   clean: RenderCancellation<CTX>;
 }
 
-export function render(shape: HulloElement) {
+export function render(shape: DOMElement) {
   const e = document.createElement(shape.tagName);
   return { element: e, possesion: mold(e, shape) };
 }
 
-function render_internal(shape: HulloElement, inheritedSync: SyncMode) {
+function render_internal(shape: DOMElement, inheritedSync: SyncMode) {
   const e = document.createElement(shape.tagName);
   return { element: e, possesion: mold(e, shape, inheritedSync) };
 }
 
 export function mold(
   htmlElement: HTMLElement,
-  elementShape: HulloElement,
+  elementShape: DOMElement,
   inheritedSync?: SyncMode
 ): JoinedPossesions {
   const { attrs, props, events, style, children } = elementShape;
@@ -115,7 +115,7 @@ function joinedPossesionsCancel(
 }
 
 interface DerefPossesion extends Possesion<DerefPossesion> {
-  shape: HulloElement;
+  shape: DOMElement;
   clean(
     this: DerefPossesion,
     htmlElement: HTMLElement,
@@ -134,7 +134,7 @@ function derefCancel(
 type In<T, N extends keyof T> = T[N];
 
 type ChildrenRegistry = {
-  shapes: HulloElement[];
+  shapes: DOMElement[];
   elements: HTMLElement[];
   possesions: Possesion[];
 };
@@ -142,7 +142,7 @@ type ChildrenRegistry = {
 function render_children(
   htmlElement: HTMLElement,
   syncOptions: SyncMode,
-  childShapes$: HulloElement["children"]
+  childShapes$: DOMElement["children"]
 ) {
   const children: ChildrenRegistry = {
     shapes: [],
@@ -163,7 +163,7 @@ function render_children(
 function render_children_each(
   htmlElement: HTMLElement,
   syncOptions: SyncMode,
-  nextShapes: Array<HulloElement>,
+  nextShapes: Array<DOMElement>,
   children: ChildrenRegistry
 ) {
   const {
@@ -360,7 +360,7 @@ function render_children_cleanup(
 function render_event_regular<NAME extends string>(
   htmlElement: HTMLElement,
   name: NAME,
-  handler: In<HulloElement["events"], NAME>
+  handler: In<DOMElement["events"], NAME>
 ): Possesion {
   htmlElement.addEventListener(name, handler as (event: Event) => any);
 
@@ -375,7 +375,7 @@ function render_event_regular<NAME extends string>(
 function render_event_observer<NAME extends string>(
   htmlElement: HTMLElement,
   name: NAME,
-  handler: In<HulloElement["events"], NAME>
+  handler: In<DOMElement["events"], NAME>
 ): Possesion {
   const observer = handler as Observer<Event>;
   let closed = false;
@@ -408,7 +408,7 @@ function render_prop<NAME extends string>(
   htmlElement: HTMLElement,
   syncOptions: SyncMode,
   name: NAME,
-  value: In<HulloElement["props"], NAME>
+  value: In<DOMElement["props"], NAME>
 ) {
   const hasDefaultValue = name in htmlElement;
   const defaultValue = hasDefaultValue ? (htmlElement as any)[name] : undefined;
@@ -471,7 +471,7 @@ function render_style<NAME extends keyof CSSStyleDeclaration>(
   htmlElement: HTMLElement,
   syncOptions: SyncMode,
   name: NAME,
-  value: HulloElement["style"][NAME]
+  value: DOMElement["style"][NAME]
 ) {
   const defaultValue = htmlElement.style[name];
   const state = {
@@ -516,7 +516,7 @@ function render_attr<NAME extends string>(
   htmlElement: HTMLElement,
   syncOptions: SyncMode,
   name: NAME,
-  value: In<HulloElement["attrs"], NAME>
+  value: In<DOMElement["attrs"], NAME>
 ) {
   const defaultValue = htmlElement.getAttribute(name);
 

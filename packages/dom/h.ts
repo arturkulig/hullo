@@ -1,7 +1,7 @@
-import { HulloElement, HulloElementDescription, element } from "./element";
+import { DOMElement, DOMElementDesc, element } from "./element";
 import { Observable } from "@hullo/core/observable";
 
-type CustomComponent<PROPS extends object> = (p: PROPS) => HulloElement;
+type CustomComponent<PROPS extends object> = (p: PROPS) => DOMElement;
 type TagNames = keyof ElementTagNameMap;
 
 export function h<PROPS extends object>(
@@ -10,13 +10,13 @@ export function h<PROPS extends object>(
   ...children: PROPS extends { children: any[] }
     ? (PROPS extends { children: infer R } ? R : [])
     : []
-): HulloElement;
+): DOMElement;
 export function h<TAG extends TagNames>(
   tag: TAG,
-  props: HulloElementDescription,
-  ...children: HulloElement[] | [Observable<HulloElement[]>]
-): HulloElement;
-export function h(...args: any[]): HulloElement {
+  props: DOMElementDesc,
+  ...children: DOMElement[] | [Observable<DOMElement[]>]
+): DOMElement;
+export function h(...args: any[]): DOMElement {
   if (typeof args[0] === "function") {
     const [component, props, ...children] = args;
     return component(
