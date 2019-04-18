@@ -9,7 +9,7 @@
     "test": "concurrently \"npm run clear\" \"npm run index\" && jest",
     "build": "concurrently \"npm run clear\" \"npm run index\" && lerna exec --parallel -- tsc",
     "prepublish": "npm run build",
-    "dev": "npm t &&  && jest --watch"
+    "dev": "concurrently \"npm run clear\" \"npm run index\" && jest --watch"
   },
   "keywords": [],
   "author": "",
