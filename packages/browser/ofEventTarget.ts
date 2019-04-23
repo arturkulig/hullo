@@ -1,4 +1,5 @@
 import { observable } from "@hullo/core/observable";
+import { subject } from "@hullo/core/operators/subject";
 import { duplex } from "@hullo/core/duplex";
 
 export function ofEventTarget<VALUE_EVENT_META = void>(
@@ -26,7 +27,7 @@ export function ofEventTarget<VALUE_EVENT_META = void>(
           emitter.removeEventListener(completionName, complete);
         }
       };
-    }),
+    }).pipe(subject),
     {
       get closed() {
         return false;

@@ -1,5 +1,6 @@
 export * from './fetch'
 export * from './geolocation'
+export * from './interconnect'
 export * from './ofEventTarget'
 export * from './ofHistory'
 export * from './ofMessagePort'
