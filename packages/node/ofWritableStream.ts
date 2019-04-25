@@ -2,7 +2,7 @@ import { Observer } from "@hullo/core/observable";
 
 export function ofWritableStream(
   stream: NodeJS.WritableStream
-): Observer<Buffer | Uint8Array | string> {
+): Observer<ArrayBuffer | string> {
   let closed = false;
   return {
     get closed() {
@@ -14,7 +14,11 @@ export function ofWritableStream(
         return Promise.resolve();
       }
       return new Promise(r => {
-        stream.write(buffer, r);
+        if (typeof buffer === "string") {
+          stream.write(new Buffer(buffer, "utf-8"), r);
+        } else {
+          stream.write(new Buffer(buffer), r);
+        }
       });
     },
 

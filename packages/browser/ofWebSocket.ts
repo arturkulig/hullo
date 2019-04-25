@@ -3,14 +3,16 @@ import { channel } from "@hullo/core/channel";
 
 export function ofWebSocket(
   ws: WebSocket
-): Duplex<WebSocketData, WebSocketData> {
-  const ch = channel<WebSocketData>();
+): Duplex<ArrayBuffer | string, ArrayBuffer | string> {
+  ws.binaryType = "arraybuffer";
+
+  const ch = channel<ArrayBuffer | string>();
 
   let connected = false;
   let closed = false;
   const queue: Array<
     | { done: true; ack: () => any }
-    | { done: false; data: WebSocketData; ack: () => any }
+    | { done: false; data: ArrayBuffer | string; ack: () => any }
   > = [];
 
   ws.addEventListener("open", () => {
@@ -27,7 +29,8 @@ export function ofWebSocket(
     queue.splice(0);
 
     ws.addEventListener("message", msgEvent => {
-      ch.next(msgEvent.data);
+      const data: string | ArrayBuffer = msgEvent.data;
+      ch.next(data);
     });
 
     ws.addEventListener("error", () => {
@@ -41,12 +44,12 @@ export function ofWebSocket(
     });
   });
 
-  return duplex<WebSocketData, WebSocketData>(ch, {
+  return duplex<ArrayBuffer | string, ArrayBuffer | string>(ch, {
     get closed() {
       return closed;
     },
 
-    next(v: WebSocketData) {
+    next(v: ArrayBuffer | string) {
       if (closed) {
         return Promise.resolve();
       }
@@ -77,9 +80,8 @@ export function ofWebSocket(
   });
 }
 
-type WebSocketData =
-  | string
-  | ArrayBuffer
-  | SharedArrayBuffer
-  | ArrayBufferView
-  | Blob;
+let utf8: TextEncoder;
+
+function getUTF8TextEncoder() {
+  return utf8 || (utf8 = new TextEncoder());
+}

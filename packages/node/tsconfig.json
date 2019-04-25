@@ -4,7 +4,7 @@
     "moduleResolution": "node",
     "declaration": true,
     "target": "esnext",
-    "lib": ["esnext", "esnext.asynciterable"],
+    "lib": ["esnext", "esnext.asynciterable", "dom"],
     "types": ["node", "jest"],
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,

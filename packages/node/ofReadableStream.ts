@@ -3,9 +3,9 @@ import { Writable } from "stream";
 
 export function ofReadableStream(
   stream: NodeJS.ReadableStream
-): Observable<Buffer | Uint8Array | string> {
+): Observable<ArrayBuffer | string> {
   return observable<
-    Buffer | Uint8Array | string,
+    ArrayBuffer | string,
     OfReadableStreamContext,
     OfReadableStreamArg
   >(ofReadableStreamProducer, ofReadableStreamContext, stream);
@@ -13,14 +13,14 @@ export function ofReadableStream(
 
 function ofReadableStreamProducer(
   this: OfReadableStreamContext,
-  observer: Observer<Buffer | Uint8Array | string>
+  observer: Observer<ArrayBuffer | string>
 ) {
   const { stream } = this;
   stream.pipe(
     new Writable({
-      write(data: Buffer | Uint8Array | string, _encoding, cb) {
+      write(data: unknown, _encoding, cb) {
         if (!observer.closed) {
-          observer.next(data).then(() => {
+          observer.next(normalize(data)).then(() => {
             cb();
           });
         }
@@ -30,6 +30,22 @@ function ofReadableStreamProducer(
       }
     })
   );
+}
+
+function normalize(data: unknown) {
+  if (typeof data === "string") {
+    return data;
+  }
+  if (Buffer.isBuffer(data)) {
+    return data.buffer;
+  }
+  if (data instanceof ArrayBuffer) {
+    return data;
+  }
+  if (data instanceof Uint8Array) {
+    return data.buffer;
+  }
+  throw new Error();
 }
 
 function ofReadableStreamContext(
