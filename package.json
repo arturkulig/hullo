@@ -9,7 +9,8 @@
     "test": "concurrently \"npm run clear\" \"npm run index\" && jest",
     "build": "concurrently \"npm run clear\" \"npm run index\" && lerna exec --parallel -- tsc",
     "prepublish": "npm run build",
-    "dev": "concurrently \"npm run clear\" \"npm run index\" && jest --watch"
+    "dev": "concurrently \"npm run clear\" \"npm run index\" && jest --watch",
+    "create-package": "ts-node create_package.ts"
   },
   "keywords": [],
   "author": "",
