@@ -1,79 +1,76 @@
-import { Subscription, observable, Observable, Observer } from "../observable";
+import {
+  Subscription,
+  Observable,
+  Observer,
+  ComplexProducer,
+  Cancellation
+} from "../observable";
 
-export function flatMap<T, U>(xf: (v: T) => Observable<U>) {
+export function flatMap<T, U>(xf: XF<T, U>) {
   return function flatMapI(source: Observable<T>): Observable<U> {
-    return observable<U, FlatMapContext<T, U>, FlatMapArg<T, U>>(
-      flatMapProducer,
-      flatMapContext,
-      { xf, source }
+    return new Observable<U>(new FlatMapProducer<T, U>(source, xf));
+  };
+}
+
+class FlatMapProducer<T, U> implements ComplexProducer<U> {
+  constructor(private source: Observable<T>, private xf: XF<T, U>) {}
+
+  subscribe(observer: Observer<U>) {
+    const sub = this.source.subscribe(
+      new FlatMapSourceObserver<T, U>(observer, this.xf)
     );
-  };
-}
-
-interface FlatMapArg<T, U> {
-  xf: (v: T) => Observable<U>;
-  source: Observable<T>;
-}
-
-interface FlatMapContext<T, U> {
-  xf: (v: T) => Observable<U>;
-  source: Observable<T>;
-  sub: Subscription | undefined;
-  innerSub: Subscription | undefined;
-}
-
-interface FlatMapSubContext<T, U> {
-  context: FlatMapContext<T, U>;
-  observer: Observer<U>;
-}
-
-function flatMapContext<T, U>(arg: FlatMapArg<T, U>): FlatMapContext<T, U> {
-  return {
-    xf: arg.xf,
-    source: arg.source,
-    sub: undefined,
-    innerSub: undefined
-  };
-}
-
-function flatMapProducer<T, U>(
-  this: FlatMapContext<T, U>,
-  observer: Observer<U>
-) {
-  const subCtx: FlatMapSubContext<T, U> = { observer, context: this };
-  this.sub = this.source.subscribe(
-    {
-      next: flatMapNext,
-      complete: flatMapComplete
-    },
-    subCtx
-  );
-
-  return flatMapCancel;
-}
-
-function flatMapCancel<T, U>(this: FlatMapContext<T, U>) {
-  if (this.sub && !this.sub.closed) {
-    this.sub.cancel();
+    return new FlatMapCancel(sub);
   }
 }
 
-function flatMapNext<T, U>(this: FlatMapSubContext<T, U>, value: T) {
-  return new Promise(r => {
-    this.context.innerSub = this.context.xf(value).subscribe(
-      {
-        next: flatMapInnerNext,
-        complete: r
-      },
-      this
-    );
-  });
+class FlatMapCancel implements Cancellation {
+  constructor(private sub: Subscription) {}
+
+  cancel() {
+    if (!this.sub.closed) {
+      this.sub.cancel();
+    }
+  }
 }
 
-function flatMapInnerNext<T, U>(this: FlatMapSubContext<T, U>, value: U) {
-  return this.observer.next(value);
+class FlatMapSourceObserver<T, U> implements Observer<T> {
+  get closed() {
+    return this.outerObserver.closed;
+  }
+
+  constructor(private outerObserver: Observer<U>, private xf: XF<T, U>) {}
+
+  next(value: T) {
+    return new Promise<void>(resolve => {
+      this.xf(value).subscribe(
+        new FlatMapInnerSourceObserver<U>(this.outerObserver, resolve)
+      );
+    });
+  }
+
+  complete() {
+    return this.outerObserver.complete();
+  }
 }
 
-function flatMapComplete<T, U>(this: FlatMapSubContext<T, U>) {
-  return this.observer.complete();
+class FlatMapInnerSourceObserver<U> implements Observer<U> {
+  get closed() {
+    return this.outerObserver.closed;
+  }
+
+  constructor(private outerObserver: Observer<U>, private done: () => any) {}
+
+  next(value: U) {
+    return this.outerObserver.next(value);
+  }
+
+  complete() {
+    const { done } = this;
+    done();
+    return Promise.resolve();
+  }
+}
+
+interface XF<T, U> {
+  (v: T): Observable<U>;
 }

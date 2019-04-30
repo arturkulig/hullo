@@ -1,32 +1,73 @@
-import { Observable } from "@hullo/core/observable";
-import { switchMap } from "@hullo/core/operators/switchMap";
-import { of } from "@hullo/core/of";
+import {
+  Observable,
+  ComplexProducer,
+  Observer,
+  Cancellation,
+  Subscription
+} from "@hullo/core/observable";
 import { LocationDescriptorObject } from "history";
 
-export function route<T, HistoryLocationState = any>(config: {
-  [id: string]: (matches: string[]) => Observable<T>;
-}) {
+export function route<T, HistoryLocationState = any>(config: RouteConfig<T>[]) {
   return function routeI(
     source: Observable<LocationDescriptorObject<HistoryLocationState>>
-  ): Observable<T> {
-    const routes = Object.keys(config).map(pattern => ({
-      regex: new RegExp(
-        /^\/.*\/$/.test(pattern) ? /^\/(.*)\/$/.exec(pattern)![1] : pattern
-      ),
-      response: config[pattern]
-    }));
-    return source.pipe(
-      switchMap(location => {
-        if (typeof location.pathname === "string") {
-          for (const { regex, response } of routes) {
-            const match = regex.exec(location.pathname);
-            if (match) {
-              return response(match.slice(1));
-            }
-          }
-        }
-        return of([]);
-      })
+  ) {
+    return new Observable<T>(
+      new RouteProducer<T, HistoryLocationState>(source, config)
     );
   };
+}
+
+class RouteProducer<T, HistoryLocationState> implements ComplexProducer<T> {
+  constructor(
+    private source: Observable<LocationDescriptorObject<HistoryLocationState>>,
+    private config: RouteConfig<T>[]
+  ) {}
+
+  subscribe(observer: Observer<T>) {
+    const sub = this.source.subscribe(new RouteObserver(this.config, observer));
+    return new RoutingCancel(sub);
+  }
+}
+
+class RoutingCancel implements Cancellation {
+  constructor(private sub: Subscription) {}
+
+  cancel() {
+    if (!this.sub.closed) {
+      this.sub.cancel();
+    }
+  }
+}
+
+class RouteObserver<T, HistoryLocationState>
+  implements Observer<LocationDescriptorObject<HistoryLocationState>> {
+  constructor(
+    private config: RouteConfig<T>[],
+    private observer: Observer<T>
+  ) {}
+
+  get closed() {
+    return this.observer.closed;
+  }
+
+  next(location: LocationDescriptorObject<HistoryLocationState>) {
+    if (typeof location.pathname === "string") {
+      for (const { when, have } of this.config) {
+        const result = when.exec(location.pathname);
+        if (result) {
+          return this.observer.next(have(result.slice(1)));
+        }
+      }
+    }
+    return Promise.resolve();
+  }
+
+  complete() {
+    return this.observer.complete();
+  }
+}
+
+interface RouteConfig<T> {
+  when: RegExp;
+  have: (matches: string[]) => T;
 }

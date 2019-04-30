@@ -1,69 +1,55 @@
-import { Subscription, Observable, observable, Observer } from "../observable";
+import {
+  Subscription,
+  Observable,
+  Observer,
+  ComplexProducer,
+  Cancellation
+} from "../observable";
 
-export function filter<T>(predicate: (v: T) => boolean) {
+export function filter<T>(predicate: Predicate<T>) {
   return function filterI(source: Observable<T>): Observable<T> {
-    return observable<T, FilterContext<T>, FilterArg<T>>(
-      filterProducer,
-      filterContext,
-      {
-        predicate,
-        source
-      }
+    return new Observable<T>(new FilterProducer<T>(source, predicate));
+  };
+}
+
+class FilterProducer<T> implements ComplexProducer<T> {
+  constructor(private source: Observable<T>, private xf: Predicate<T>) {}
+
+  subscribe(observer: Observer<T>) {
+    const sub = this.source.subscribe(
+      new FilterSourceObserver<T>(this.xf, observer)
     );
-  };
+    return new FilterCancel(sub);
+  }
 }
 
-interface FilterArg<T> {
-  predicate: (v: T) => boolean;
-  source: Observable<T>;
+class FilterSourceObserver<T> {
+  get closed() {
+    return this.observer.closed;
+  }
+
+  constructor(private predicate: Predicate<T>, private observer: Observer<T>) {}
+
+  next(value: T) {
+    const { predicate } = this;
+    return predicate(value) ? this.observer.next(value) : Promise.resolve();
+  }
+
+  complete() {
+    return this.observer.complete();
+  }
 }
 
-interface FilterContext<T> {
-  predicate: (v: T) => boolean;
-  source: Observable<T>;
-  sub: Subscription | undefined;
-}
+class FilterCancel implements Cancellation {
+  constructor(private sub: Subscription) {}
 
-interface FilterSubContext<T> {
-  predicate: (v: T) => boolean;
-  observer: Observer<T>;
-}
-
-function filterContext<T>(arg: FilterArg<T>): FilterContext<T> {
-  return {
-    predicate: arg.predicate,
-    source: arg.source,
-    sub: undefined
-  };
-}
-
-function filterProducer<T>(this: FilterContext<T>, observer: Observer<T>) {
-  this.sub = this.source.subscribe(
-    {
-      next: filterNext,
-      complete: filterComplete
-    },
-    {
-      predicate: this.predicate,
-      observer
+  cancel() {
+    if (!this.sub.closed) {
+      this.sub.cancel();
     }
-  );
-
-  return filterCancel;
-}
-
-function filterCancel<T>(this: FilterContext<T>) {
-  if (this.sub && !this.sub.closed) {
-    this.sub.cancel();
   }
 }
 
-function filterNext<T>(this: FilterSubContext<T>, value: T) {
-  if (this.predicate(value)) {
-    return this.observer.next(value);
-  }
-}
-
-function filterComplete<T>(this: FilterSubContext<T>) {
-  return this.observer.complete();
+interface Predicate<T> {
+  (v: T): boolean;
 }

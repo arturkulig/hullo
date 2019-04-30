@@ -1,154 +1,155 @@
-import { Subscription, Observable, Observer, observable } from "../observable";
-import { Atom, atom } from "../atom";
+import {
+  Subscription,
+  Observable,
+  Observer,
+  ComplexProducer
+} from "../observable";
+import { Atom } from "../atom";
 
 export function deepMapByKey<T, U>(
-  xf: TrackTransform<T, U>,
-  identity: TrackIdentity<T>
+  xf: DeepMapByKeyTransform<T, U>,
+  identity: DeepMapByKeyIndentity<T>
 ) {
   return function deepMapByKeyI(source: Observable<T[]>): Observable<U[]> {
-    return observable<U[], KeyedParallelContext<T, U>, KeyedParallelArg<T, U>>(
-      deepMapByKeyProducer,
-      deepMapByKeyContext,
-      {
-        xf,
-        identity,
-        source
-      }
+    return new Observable<U[]>(
+      new DeepMapByKeyProducer<T, U>(xf, identity, source)
     );
   };
 }
 
-function deepMapByKeyContext<T, U>(
-  arg: KeyedParallelArg<T, U>
-): KeyedParallelContext<T, U> {
-  return {
-    observer: undefined,
-    sub: undefined,
-    xf: arg.xf,
-    source: arg.source,
-    identity: arg.identity,
-    detail$s: [],
-    output: [],
-    lastInput: [],
-    keys: []
-  };
-}
+class DeepMapByKeyProducer<T, U> implements ComplexProducer<U[]> {
+  constructor(
+    private xf: DeepMapByKeyTransform<T, U>,
+    private identity: DeepMapByKeyIndentity<T>,
+    private source: Observable<T[]>
+  ) {}
 
-function deepMapByKeyProducer<T, U>(
-  this: KeyedParallelContext<T, U>,
-  observer: Observer<U[]>
-) {
-  this.observer = observer;
-  this.sub = this.source.subscribe(
-    {
-      next,
-      complete
-    },
-    this
-  );
+  subscribe(observer: Observer<U[]>) {
+    const context: DeepMapByKeyContext<T, U> = {
+      observer,
+      xf: this.xf,
+      source: this.source,
+      identity: this.identity,
+      detail$s: [],
+      output: [],
+      lastInput: [],
+      keys: []
+    };
 
-  return deepMapByKeyCancel;
-}
+    const sub = this.source.subscribe(
+      new DeepMapByKeySourceObserver<T, U>(context)
+    );
 
-function deepMapByKeyCancel<T, U>(this: KeyedParallelContext<T, U>) {
-  if (this.sub && !this.sub.closed) {
-    this.sub.cancel();
+    return new DeepMapByKeyCancel(sub);
   }
 }
 
-function next<T, U>(this: KeyedParallelContext<T, U>, list: T[]) {
-  const nextDetail$s: Atom<T>[] = this.detail$s.slice(0, list.length);
-  const nextKeys: string[] = this.keys.slice(0, list.length);
-  const nextOutput: U[] = this.output.slice(0, list.length);
-  const deliveries: Promise<any>[] = [];
-  let itemsMoved = 0;
-  let itemsCreated = 0;
-  let itemsRemoved = 0;
+class DeepMapByKeyCancel {
+  constructor(private sub: Subscription) {}
 
-  for (let i = 0; i < list.length; i++) {
-    const key = this.identity(list[i]);
-    const prevPos = this.keys.indexOf(key);
+  cancel() {
+    if (!this.sub.closed) {
+      this.sub.cancel();
+    }
+  }
+}
 
-    if (prevPos >= 0) {
-      if (prevPos !== i) {
-        nextDetail$s[i] = this.detail$s[prevPos];
-        nextKeys[i] = this.keys[prevPos];
-        nextOutput[i] = this.output[prevPos];
-        itemsMoved++;
-      }
-      if (this.lastInput[prevPos] !== list[i]) {
-        const delivery = nextDetail$s[i].next(list[i]);
+class DeepMapByKeySourceObserver<T, U> implements Observer<T[]> {
+  get closed() {
+    return this.context.observer.closed;
+  }
+
+  constructor(private context: DeepMapByKeyContext<T, U>) {}
+
+  next(list: T[]) {
+    const { context } = this;
+    const nextDetail$s: Atom<T>[] = context.detail$s.slice(0, list.length);
+    const nextKeys: string[] = context.keys.slice(0, list.length);
+    const nextOutput: U[] = context.output.slice(0, list.length);
+    const deliveries: Promise<any>[] = [];
+    let itemsMoved = 0;
+    let itemsCreated = 0;
+    let itemsRemoved = 0;
+
+    for (let i = 0; i < list.length; i++) {
+      const key = context.identity(list[i]);
+      const prevPos = context.keys.indexOf(key);
+
+      if (prevPos >= 0) {
+        if (prevPos !== i) {
+          nextDetail$s[i] = context.detail$s[prevPos];
+          nextKeys[i] = context.keys[prevPos];
+          nextOutput[i] = context.output[prevPos];
+          itemsMoved++;
+        }
+        if (context.lastInput[prevPos] !== list[i]) {
+          const delivery = nextDetail$s[i].next(list[i]);
+          deliveries.push(delivery);
+        }
+      } else {
+        itemsCreated++;
+        const detail$ = new Atom<T>(list[i]);
+        const newOutputEntry = context.xf(detail$);
+        nextKeys[i] = context.identity(list[i]);
+        nextDetail$s[i] = detail$;
+        nextOutput[i] = newOutputEntry;
+        const delivery = detail$.next(list[i]);
         deliveries.push(delivery);
       }
-    } else {
-      itemsCreated++;
-      const detail$ = atom<T>(list[i]);
-      const newOutputEntry = this.xf(detail$);
-      nextKeys[i] = this.identity(list[i]);
-      nextDetail$s[i] = detail$;
-      nextOutput[i] = newOutputEntry;
-      const delivery = detail$.next(list[i]);
+    }
+
+    if (list.length - itemsCreated - context.lastInput.length < 0)
+      for (let i = 0, l = context.keys.length; i < l; i++) {
+        if (nextKeys.indexOf(context.keys[i]) < 0) {
+          itemsRemoved++;
+          const delivery = context.detail$s[i].complete();
+          deliveries.push(delivery);
+        }
+      }
+
+    if (context.observer && (itemsMoved || itemsCreated || itemsRemoved)) {
+      const delivery = context.observer.next(nextOutput.slice(0));
       deliveries.push(delivery);
     }
+
+    context.detail$s = nextDetail$s;
+    context.keys = nextKeys;
+    context.output = nextOutput;
+    context.lastInput = list;
+
+    return deliveries.length ? Promise.all(deliveries) : Promise.resolve();
   }
 
-  if (list.length - itemsCreated - this.lastInput.length < 0)
-    for (let i = 0, l = this.keys.length; i < l; i++) {
-      if (nextKeys.indexOf(this.keys[i]) < 0) {
-        itemsRemoved++;
-        const delivery = this.detail$s[i].complete();
-        deliveries.push(delivery);
-      }
+  complete() {
+    const { context } = this;
+    if (!context.observer) {
+      return Promise.resolve();
     }
-
-  if (this.observer && (itemsMoved || itemsCreated || itemsRemoved)) {
-    const delivery = this.observer.next(nextOutput.slice(0));
-    deliveries.push(delivery);
+    const deliveries: Promise<void>[] = [];
+    for (let i = 0, l = context.detail$s.length; i < l; i++) {
+      const delivery = context.detail$s[i].complete();
+      deliveries.push(delivery);
+    }
+    {
+      const delivery = context.observer.complete();
+      deliveries.push(delivery);
+    }
+    return Promise.all(deliveries);
   }
-
-  this.detail$s = nextDetail$s;
-  this.keys = nextKeys;
-  this.output = nextOutput;
-  this.lastInput = list;
-
-  return deliveries.length ? Promise.all(deliveries) : Promise.resolve();
 }
 
-function complete<T, U>(this: KeyedParallelContext<T, U>) {
-  if (!this.observer) {
-    return;
-  }
-  const deliveries: Promise<void>[] = [];
-  for (let i = 0, l = this.detail$s.length; i < l; i++) {
-    const delivery = this.detail$s[i].complete();
-    deliveries.push(delivery);
-  }
-  {
-    const delivery = this.observer.complete();
-    deliveries.push(delivery);
-  }
-  return Promise.all(deliveries);
-}
-
-interface TrackTransform<T, U> {
+interface DeepMapByKeyTransform<T, U> {
   (value: Observable<T>): U;
 }
 
-interface TrackIdentity<T> {
+interface DeepMapByKeyIndentity<T> {
   (value: T): string;
 }
 
-interface KeyedParallelArg<T, U> {
-  xf: TrackTransform<T, U>;
-  identity: TrackIdentity<T>;
-  source: Observable<T[]>;
-}
-
-interface KeyedParallelContext<T, U> {
-  observer: Observer<U[]> | undefined;
-  sub: Subscription | undefined;
-  xf: TrackTransform<T, U>;
-  identity: TrackIdentity<T>;
+interface DeepMapByKeyContext<T, U> {
+  observer: Observer<U[]>;
+  xf: DeepMapByKeyTransform<T, U>;
+  identity: DeepMapByKeyIndentity<T>;
   source: Observable<T[]>;
   detail$s: Atom<T>[];
   keys: string[];

@@ -1,64 +1,55 @@
-import { Subscription, Observable, observable, Observer } from "../observable";
+import {
+  Subscription,
+  Observable,
+  Observer,
+  ComplexProducer,
+  Cancellation
+} from "../observable";
 
-export function map<T, U>(xf: (v: T) => U) {
+export function map<T, U>(xf: XF<T, U>) {
   return function mapI(source: Observable<T>): Observable<U> {
-    return observable<U, MapContext<T, U>, MapArg<T, U>>(
-      mapProducer,
-      mapContext,
-      { xf, source }
+    return new Observable<U>(new MapProducer<T, U>(source, xf));
+  };
+}
+
+class MapProducer<T, U> implements ComplexProducer<U> {
+  constructor(private source: Observable<T>, private xf: XF<T, U>) {}
+
+  subscribe(observer: Observer<U>) {
+    const sub = this.source.subscribe(
+      new MapSourceObserver<T, U>(this.xf, observer)
     );
-  };
-}
-
-interface MapArg<T, U> {
-  xf: (v: T) => U;
-  source: Observable<T>;
-}
-
-interface MapContext<T, U> {
-  xf: (v: T) => U;
-  source: Observable<T>;
-  sub: Subscription | undefined;
-}
-
-interface MapSubContext<T, U> {
-  xf: (v: T) => U;
-  observer: Observer<U>;
-}
-
-function mapContext<T, U>(arg: MapArg<T, U>): MapContext<T, U> {
-  return {
-    xf: arg.xf,
-    source: arg.source,
-    sub: undefined
-  };
-}
-
-function mapProducer<T, U>(this: MapContext<T, U>, observer: Observer<U>) {
-  this.sub = this.source.subscribe(
-    {
-      next: mapNext,
-      complete: mapComplete
-    },
-    {
-      xf: this.xf,
-      observer
-    }
-  );
-
-  return mapCancel;
-}
-
-function mapCancel<T, U>(this: MapContext<T, U>) {
-  if (this.sub && !this.sub.closed) {
-    this.sub.cancel();
+    return new MapCancel(sub);
   }
 }
 
-function mapNext<T, U>(this: MapSubContext<T, U>, value: T) {
-  return this.observer.next(this.xf(value));
+class MapSourceObserver<T, U> {
+  get closed() {
+    return this.observer.closed;
+  }
+
+  constructor(private xf: XF<T, U>, private observer: Observer<U>) {}
+
+  next(value: T) {
+    const { xf } = this;
+    return this.observer.next(xf(value));
+  }
+
+  complete() {
+    return this.observer.complete();
+  }
 }
 
-function mapComplete<T, U>(this: MapSubContext<T, U>) {
-  return this.observer.complete();
+class MapCancel implements Cancellation {
+  constructor(private sub: Subscription) {}
+
+  cancel() {
+    if (!this.sub.closed) {
+      this.sub.cancel();
+    }
+  }
+}
+
+interface XF<T, U> {
+  (v: T): U;
 }

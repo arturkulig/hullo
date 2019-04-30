@@ -1,33 +1,21 @@
-import { observable } from "@hullo/core/observable";
+import {
+  Observable,
+  ComplexProducer,
+  Observer,
+  Cancellation
+} from "@hullo/core/observable";
 import { subject } from "@hullo/core/operators/subject";
-import { duplex } from "@hullo/core/duplex";
+import { Duplex } from "@hullo/core/duplex";
 
 export function ofEventTarget<VALUE_EVENT_META = void>(
   emitter: EventTarget,
   valueName: string,
   completionName?: string
 ) {
-  return duplex<VALUE_EVENT_META, Event & VALUE_EVENT_META>(
-    observable<Event & VALUE_EVENT_META>(observer => {
-      function next(event: Event) {
-        observer.next(event as Event & VALUE_EVENT_META);
-      }
-      function complete() {
-        observer.complete();
-      }
-
-      emitter.addEventListener(valueName, next);
-      if (completionName) {
-        emitter.addEventListener(completionName, complete);
-      }
-
-      return () => {
-        emitter.removeEventListener(valueName, next);
-        if (completionName) {
-          emitter.removeEventListener(completionName, complete);
-        }
-      };
-    }).pipe(subject),
+  return new Duplex<VALUE_EVENT_META, Event & VALUE_EVENT_META>(
+    new Observable<Event & VALUE_EVENT_META>(
+      new EventsProducer(emitter, valueName, completionName)
+    ).pipe(subject),
     {
       get closed() {
         return false;
@@ -47,4 +35,52 @@ export function ofEventTarget<VALUE_EVENT_META = void>(
       }
     }
   );
+}
+
+class EventsProducer<VALUE_EVENT_META>
+  implements ComplexProducer<Event & VALUE_EVENT_META> {
+  constructor(
+    private emitter: EventTarget,
+    private valueName: string,
+    private completionName?: string
+  ) {}
+
+  subscribe(observer: Observer<Event & VALUE_EVENT_META>) {
+    function next(event: Event) {
+      observer.next(event as Event & VALUE_EVENT_META);
+    }
+    function complete() {
+      observer.complete();
+    }
+
+    this.emitter.addEventListener(this.valueName, next);
+    if (this.completionName) {
+      this.emitter.addEventListener(this.completionName, complete);
+    }
+
+    return new EventsCancel(
+      this.emitter,
+      this.valueName,
+      next,
+      this.completionName,
+      complete
+    );
+  }
+}
+
+class EventsCancel implements Cancellation {
+  constructor(
+    private emitter: EventTarget,
+    private valueName: string,
+    private next: (event: Event) => any,
+    private completionName?: string,
+    private complete?: () => any
+  ) {}
+
+  cancel() {
+    this.emitter.removeEventListener(this.valueName, this.next);
+    if (this.completionName && this.complete) {
+      this.emitter.removeEventListener(this.completionName, this.complete);
+    }
+  }
 }

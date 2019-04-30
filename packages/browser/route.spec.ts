@@ -2,7 +2,6 @@ import { ofHistory } from "./ofHistory";
 import { route } from "./route";
 import { createMemoryHistory } from "history";
 import { timeout } from "@hullo/core/timeout";
-import { of } from "@hullo/core/of";
 
 describe("route", () => {
   it("reads", async () => {
@@ -14,11 +13,15 @@ describe("route", () => {
     const history$ = ofHistory(history);
     history$
       .pipe(
-        route({
-          "/test/([0-9]+)": (...args) => of(["test", ...args].join("-")),
-          "/[a-z]": () => of("letters"),
-          "/[0-9]": () => of("numbers")
-        })
+        route([
+          {
+            when: /^\/test\/([0-9]+)$/,
+            have: (...args) => ["test", ...args].join("-")
+          },
+          { when: /^\/[a-z]$/, have: () => "letters" },
+          { when: /^\/[0-9]$/, have: () => "numbers" },
+          { when: /^\/$/, have: () => "index" }
+        ])
       )
       .subscribe({
         next: v => {
@@ -26,15 +29,15 @@ describe("route", () => {
         }
       });
     await timeout(0);
-    expect(result).toEqual([]);
+    expect(result).toEqual(["index"]);
 
     await history$.next({ pathname: "/d" });
-    expect(result).toEqual(["letters"]);
+    expect(result).toEqual(["index", "letters"]);
 
     await history$.next({ pathname: "/0" });
-    expect(result).toEqual(["letters", "numbers"]);
+    expect(result).toEqual(["index", "letters", "numbers"]);
 
     await history$.next({ pathname: "/test/42" });
-    expect(result).toEqual(["letters", "numbers", "test-42"]);
+    expect(result).toEqual(["index", "letters", "numbers", "test-42"]);
   });
 });

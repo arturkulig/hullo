@@ -1,74 +1,69 @@
-import { observable, Observable, Observer, Subscription } from "../observable";
+import {
+  Observable,
+  Observer,
+  Subscription,
+  ComplexProducer,
+  Cancellation
+} from "../observable";
 
 export function scan<T, U>(
   accumulate: (accumulator: U, item: T) => U,
   start: U
 ) {
   return function scanI(source: Observable<T>): Observable<U> {
-    return observable<U, ScanContext<T, U>, ScanArg<T, U>>(
-      scanProduce,
-      scanContext,
-      { source, accumulate, start }
+    return new Observable<U>(new ScanProducer<T, U>(source, accumulate, start));
+  };
+}
+
+class ScanProducer<T, U> implements ComplexProducer<U> {
+  constructor(
+    private source: Observable<T>,
+    private accumulate: (accumulator: U, item: T) => U,
+    private start: U
+  ) {}
+
+  subscribe(observer: Observer<U>) {
+    const sourceSub = this.source.subscribe(
+      new ScanObserver(this.accumulate, this.start, observer)
     );
-  };
-}
 
-interface ScanArg<T, U> {
-  source: Observable<T>;
-  accumulate: (accumulator: U, item: T) => U;
-  start: U;
-}
-
-interface ScanContext<T, U> {
-  source: Observable<T>;
-  sourceSub: Subscription | null;
-  targetObserver: Observer<U> | null;
-  accumulate: (accumulator: U, item: T) => U;
-  last: U;
-}
-
-function scanContext<T, U>(arg: ScanArg<T, U>): ScanContext<T, U> {
-  return {
-    source: arg.source,
-    accumulate: arg.accumulate,
-    last: arg.start,
-    sourceSub: null,
-    targetObserver: null
-  };
-}
-
-function scanProduce<T, U>(this: ScanContext<T, U>, observer: Observer<U>) {
-  this.targetObserver = observer;
-  this.sourceSub = this.source.subscribe(new ScanObserver(this));
-
-  return scanCancel;
+    return new ScanCancel(sourceSub);
+  }
 }
 
 class ScanObserver<T, U> implements Observer<T> {
   get closed() {
-    return this._context.targetObserver == null;
+    return this.outerObserver.closed;
   }
 
-  constructor(private _context: ScanContext<T, U>) {}
+  constructor(
+    private accumulate: (accumulator: U, item: T) => U,
+    private last: U,
+    private outerObserver: Observer<U>
+  ) {}
 
   next(value: T) {
-    this._context.last = this._context.accumulate(this._context.last, value);
-    return this._context.targetObserver!.next(this._context.last);
+    if (this.outerObserver.closed) {
+      return Promise.resolve();
+    }
+    this.last = this.accumulate(this.last, value);
+    return this.outerObserver.next(this.last);
   }
 
   complete() {
-    return this._context.targetObserver!.complete();
+    if (this.outerObserver.closed) {
+      return Promise.resolve();
+    }
+    return this.outerObserver.complete();
   }
 }
 
-function scanCancel<T, U>(this: ScanContext<T, U>) {
-  this.targetObserver = null;
+class ScanCancel implements Cancellation {
+  constructor(private sourceSub: Subscription) {}
 
-  if (this.sourceSub) {
-    const { sourceSub } = this;
-    this.sourceSub = null;
-    if (!sourceSub.closed) {
-      sourceSub.cancel();
+  cancel() {
+    if (!this.sourceSub.closed) {
+      this.sourceSub.cancel();
     }
   }
 }

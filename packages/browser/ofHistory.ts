@@ -1,5 +1,5 @@
-import { observable } from "@hullo/core/observable";
-import { duplex, Duplex } from "@hullo/core/duplex";
+import { Observable, ComplexProducer, Observer } from "@hullo/core/observable";
+import { Duplex } from "@hullo/core/duplex";
 import { state } from "@hullo/core/operators/state";
 import { History, Location, Action, LocationDescriptorObject } from "history";
 
@@ -12,26 +12,57 @@ interface HistoryDuplex<HistoryLocationState>
 export function ofHistory<HistoryLocationState = any>(
   history: History<HistoryLocationState>
 ): HistoryDuplex<HistoryLocationState> {
-  return duplex(
-    observable<Location<HistoryLocationState>>(observer => {
-      const sub = history.listen(
-        (location: Location<HistoryLocationState>, _action: Action) => {
-          observer.next(location);
-        }
-      );
-      return sub;
-    }).pipe(state(history.location)),
-    {
-      get closed() {
-        return false;
-      },
-      next(next: LocationDescriptorObject<HistoryLocationState>) {
-        history.push(next);
-        return Promise.resolve();
-      },
-      complete() {
-        return Promise.resolve();
-      }
-    }
+  const acks: Array<() => any> = [];
+  return new Duplex(
+    new Observable(new HistoryProducer(history, acks)).pipe(
+      state(history.location)
+    ),
+    new HistoryInput(history, acks)
   );
+}
+
+class HistoryProducer<HistoryLocationState>
+  implements ComplexProducer<Location<HistoryLocationState>> {
+  constructor(
+    private history: History<HistoryLocationState>,
+    private acks: Array<() => any>
+  ) {}
+
+  subscribe(observer: Observer<Location<HistoryLocationState>>) {
+    return this.history.listen(
+      (location: Location<HistoryLocationState>, _action: Action) => {
+        const acks = this.acks.splice(0);
+        observer.next(location).then(() => {
+          acks.forEach(call);
+        });
+      }
+    );
+  }
+}
+
+function call(f: () => any) {
+  f();
+}
+
+class HistoryInput<HistoryLocationState>
+  implements Observer<LocationDescriptorObject<HistoryLocationState>> {
+  get closed() {
+    return false;
+  }
+
+  constructor(
+    private history: History<HistoryLocationState>,
+    private acks: Array<() => any>
+  ) {}
+
+  next(next: LocationDescriptorObject<HistoryLocationState>) {
+    return new Promise(resolve => {
+      this.acks.push(resolve);
+      this.history.push(next);
+    });
+  }
+
+  complete() {
+    return Promise.resolve();
+  }
 }

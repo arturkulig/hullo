@@ -1,4 +1,9 @@
-import { observable } from "@hullo/core/observable";
+import {
+  Observable,
+  ComplexProducer,
+  Observer,
+  Cancellation
+} from "@hullo/core/observable";
 
 interface PositionSuccess {
   ok: true;
@@ -13,31 +18,43 @@ interface PositionFailure {
 type PositionResult = PositionSuccess | PositionFailure;
 
 export function geolocation(options: PositionOptions) {
-  if (typeof navigator === "object" && "geolocation" in navigator) {
-    return observable<PositionResult>(observer => {
-      const watchId = navigator.geolocation.watchPosition(
-        function onGeoSuccess(position: Position) {
-          observer.next({
-            ok: true,
-            position
-          });
-        },
-        function onGeoError(error: PositionError) {
-          observer.next({
-            ok: false,
-            error
-          });
-        },
-        options
-      );
+  return new Observable<PositionResult>(
+    typeof navigator === "object" && "geolocation" in navigator
+      ? new PositionProducer(options)
+      : observer => {
+          observer.complete();
+        }
+  );
+}
 
-      return function cancelGeo() {
-        navigator.geolocation.clearWatch(watchId);
-      };
-    });
-  } else {
-    return observable<PositionResult>(observer => {
-      observer.complete();
-    });
+class PositionProducer implements ComplexProducer<PositionResult> {
+  constructor(private options: PositionOptions) {}
+
+  subscribe(observer: Observer<PositionResult>) {
+    const watchId = navigator.geolocation.watchPosition(
+      function onGeoSuccess(position: Position) {
+        observer.next({
+          ok: true,
+          position
+        });
+      },
+      function onGeoError(error: PositionError) {
+        observer.next({
+          ok: false,
+          error
+        });
+      },
+      this.options
+    );
+
+    return new GeolocationCancel(watchId);
+  }
+}
+
+class GeolocationCancel implements Cancellation {
+  constructor(private watchId: number) {}
+
+  cancel() {
+    navigator.geolocation.clearWatch(this.watchId);
   }
 }

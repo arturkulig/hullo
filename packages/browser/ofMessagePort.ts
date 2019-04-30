@@ -1,5 +1,10 @@
-import { observable } from "@hullo/core/observable";
-import { duplex, Duplex } from "@hullo/core/duplex";
+import {
+  Observable,
+  ComplexProducer,
+  Observer,
+  Cancellation
+} from "@hullo/core/observable";
+import { Duplex } from "@hullo/core/duplex";
 import { subject } from "@hullo/core/operators/subject";
 
 export interface MessagePortDuplex<IN, OUT> extends Duplex<IN, OUT> {
@@ -12,34 +17,8 @@ export function ofMessagePort<IN = any, OUT = IN>(
   let closed = false;
 
   return Object.assign(
-    duplex<IN, OUT>(
-      observable(observer => {
-        port.addEventListener("message", message);
-        port.addEventListener("error", error);
-        port.addEventListener("close", close);
-
-        return cancel;
-
-        function message(msgEvent: MessageEvent) {
-          observer.next(msgEvent.data);
-        }
-
-        function error() {
-          closed = true;
-          observer.complete();
-        }
-
-        function close() {
-          closed = true;
-          observer.complete();
-        }
-
-        function cancel() {
-          port.removeEventListener("message", message);
-          port.removeEventListener("error", error);
-          port.removeEventListener("close", close);
-        }
-      }).pipe(subject),
+    new Duplex<IN, OUT>(
+      new Observable<OUT>(new MessagesProducer(port)).pipe(subject),
       {
         get closed() {
           return closed;
@@ -81,6 +60,47 @@ export function ofMessagePort<IN = any, OUT = IN>(
       }
     }
     return Promise.resolve();
+  }
+}
+
+class MessagesProducer<T> implements ComplexProducer<T> {
+  constructor(private port: MessagePort) {}
+
+  subscribe(observer: Observer<T>) {
+    this.port.addEventListener("message", message);
+    this.port.addEventListener("error", error);
+    this.port.addEventListener("close", close);
+
+    return new MessagesCancel(this.port, message, error, close);
+
+    function message(msgEvent: MessageEvent) {
+      observer.next(msgEvent.data);
+    }
+
+    function error() {
+      closed = true;
+      observer.complete();
+    }
+
+    function close() {
+      closed = true;
+      observer.complete();
+    }
+  }
+}
+
+class MessagesCancel implements Cancellation {
+  constructor(
+    private port: MessagePort,
+    private message: (...args: any[]) => any,
+    private error: (...args: any[]) => any,
+    private close: (...args: any[]) => any
+  ) {}
+
+  cancel() {
+    this.port.removeEventListener("message", this.message);
+    this.port.removeEventListener("error", this.error);
+    this.port.removeEventListener("close", this.close);
   }
 }
 

@@ -1,141 +1,131 @@
-import { Duplex, duplex } from "./duplex";
-import { Observer, observable } from "./observable";
+import { Duplex } from "./duplex";
+import {
+  Observer,
+  Observable,
+  ComplexProducer,
+  Cancellation
+} from "./observable";
 import { subject } from "./operators/subject";
 
-export function channel<T>(this: unknown): Channel<T> {
-  const wide: ChannelWideContext<T> = {
-    buffer: [],
-    closed: false,
-    remote: undefined,
-    nextSafeHandlers: [],
-    nextUnsafeHandlers: []
-  };
-  const o = observable<T, ChannelContext<T>, ChannelWideContext<T>>(
-    channelProduce,
-    channelContext,
-    wide
-  ).pipe(subject);
+export class Channel<T> extends Duplex<T, T> {
+  private context: ChannelContext<T>;
 
-  return Object.assign(
-    duplex(
-      o,
-      {
-        get closed() {
-          return wide.closed;
-        },
-        next,
-        complete
-      },
-      wide
-    ),
-    {
-      take(this: unknown) {
-        return new Promise<T>((resolve, reject) => {
-          wide.nextUnsafeHandlers.push({ resolve, reject });
-          Promise.resolve(wide).then(flushBuffer);
-        });
-      },
-      tryTake(this: unknown) {
-        return new Promise<ChannelMessage<T>>(resolve => {
-          wide.nextSafeHandlers.push(resolve);
-          Promise.resolve(wide).then(flushBuffer);
-        });
-      }
+  constructor() {
+    const context: ChannelContext<T> = {
+      buffer: [],
+      closed: false,
+      remote: undefined,
+      nextSafeHandlers: [],
+      nextUnsafeHandlers: []
+    };
+    const out = new Observable<T>(new ChannelProducer(context)).pipe(subject);
+    const ins = new ChannelObserver<T>(context);
+    super(out, ins);
+    this.context = context;
+  }
+
+  take() {
+    return new Promise<T>((resolve, reject) => {
+      this.context.nextUnsafeHandlers.push({ resolve, reject });
+      Promise.resolve(this.context).then(flushBuffer);
+    });
+  }
+
+  tryTake() {
+    return new Promise<ChannelMessage<T>>(resolve => {
+      this.context.nextSafeHandlers.push(resolve);
+      Promise.resolve(this.context).then(flushBuffer);
+    });
+  }
+}
+
+class ChannelObserver<T> implements Observer<T> {
+  get closed() {
+    return this.context.closed;
+  }
+
+  constructor(private context: ChannelContext<T>) {}
+
+  next(value: T) {
+    return deliver(this.context, {
+      closed: false,
+      value
+    });
+  }
+
+  complete() {
+    return deliver(this.context, {
+      closed: true
+    });
+  }
+}
+
+class ChannelProducer<T> implements ComplexProducer<T> {
+  constructor(private wide: ChannelContext<T>) {}
+
+  subscribe(observer: Observer<T>) {
+    if (this.wide.closed) {
+      observer.complete();
+    } else {
+      this.wide.remote = observer;
+      Promise.resolve(this.wide).then(flushBuffer);
+      return new ChannelCancel(this.wide);
     }
-  );
-}
-
-function channelContext<T>(arg: ChannelWideContext<T>): ChannelContext<T> {
-  return { wide: arg, observer: undefined };
-}
-
-function channelProduce<T>(this: ChannelContext<T>, observer: Observer<T>) {
-  if (this.wide.closed) {
-    observer.complete();
-  } else {
-    this.wide.remote = observer;
-    Promise.resolve(this.wide).then(flushBuffer);
-    return channelCancel;
   }
 }
 
-function flushBuffer<T>(wideContext: ChannelWideContext<T>) {
+class ChannelCancel<T> implements Cancellation {
+  constructor(private wide: ChannelContext<T>) {}
+
+  cancel() {
+    this.wide.remote = undefined;
+  }
+}
+
+function flushBuffer<T>(wideContext: ChannelContext<T>) {
   for (const { message, ack } of wideContext.buffer.splice(0)) {
-    deliver
-      .call<ChannelWideContext<T>, [ChannelMessage<T>], Promise<void>>(
-        wideContext,
-        message
-      )
-      .then(ack);
+    deliver(wideContext, message).then(ack);
   }
 }
 
-function channelCancel<T>(this: ChannelContext<T>) {
-  this.wide.remote = undefined;
-}
-
-function next<T>(this: ChannelWideContext<T>, value: T) {
-  return deliver.call<
-    ChannelWideContext<T>,
-    [ChannelMessage<T>],
-    Promise<void>
-  >(this, {
-    closed: false,
-    value
-  });
-}
-
-function complete<T>(this: ChannelWideContext<T>) {
-  return deliver.call<
-    ChannelWideContext<T>,
-    [ChannelMessage<T>],
-    Promise<void>
-  >(this, {
-    closed: true
-  });
-}
-
-function deliver<T>(this: ChannelWideContext<T>, message: ChannelMessage<T>) {
-  if (this.closed) {
+function deliver<T>(context: ChannelContext<T>, message: ChannelMessage<T>) {
+  if (context.closed) {
     return Promise.resolve();
   }
 
   if (
-    this.nextSafeHandlers.length === 0 &&
-    this.nextUnsafeHandlers.length === 0 &&
-    !this.remote
+    context.nextSafeHandlers.length === 0 &&
+    context.nextUnsafeHandlers.length === 0 &&
+    !context.remote
   ) {
     return new Promise<void>(ack => {
-      this.buffer.push({ message, ack });
+      context.buffer.push({ message, ack });
     });
   }
 
   if (message.closed) {
-    this.closed = true;
+    context.closed = true;
   }
 
-  for (const handler of this.nextSafeHandlers.splice(0)) {
+  for (const handler of context.nextSafeHandlers.splice(0)) {
     handler(message);
   }
   if (message.closed) {
-    for (const handler of this.nextUnsafeHandlers.splice(0)) {
+    for (const handler of context.nextUnsafeHandlers.splice(0)) {
       handler.reject(new Error("Channel closed before it got a message"));
     }
-    return this.remote ? this.remote.complete() : Promise.resolve();
+    return context.remote ? context.remote.complete() : Promise.resolve();
   } else {
-    for (const handler of this.nextUnsafeHandlers.splice(0)) {
+    for (const handler of context.nextUnsafeHandlers.splice(0)) {
       handler.resolve(message.value);
     }
-    return this.remote ? this.remote.next(message.value) : Promise.resolve();
+    return context.remote
+      ? context.remote.next(message.value)
+      : Promise.resolve();
   }
 }
 
-export interface Channel<T> extends Duplex<T, T> {
-  take(): Promise<T>;
-  tryTake(): Promise<ChannelMessage<T>>;
-}
-
-interface ChannelWideContext<T> {
+interface ChannelContext<T> {
   buffer: Array<ChannelMessageDelivery<T>>;
   nextSafeHandlers: Array<(result: ChannelMessage<T>) => any>;
   nextUnsafeHandlers: Array<{
@@ -144,11 +134,6 @@ interface ChannelWideContext<T> {
   }>;
   closed: boolean;
   remote: Observer<T> | undefined;
-}
-
-interface ChannelContext<T> {
-  wide: ChannelWideContext<T>;
-  observer: Observer<T> | undefined;
 }
 
 type ChannelMessage<T> = { closed: true } | { closed: false; value: T };

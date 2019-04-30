@@ -1,7 +1,7 @@
 import { combineLatest } from "./combineLatest";
 import { timeout } from "./timeout";
 import { of } from "./of";
-import { observable } from "./observable";
+import { Observable } from "./observable";
 
 describe("combineLatest", () => {
   it("0 streams", async () => {
@@ -33,20 +33,20 @@ describe("combineLatest", () => {
     const completion = [-1];
     const results: any[] = [];
     const sub = combineLatest<[number, number, number]>([
-      observable<number>(observer => {
+      new Observable<number>(observer => {
         observer
           .next(0)
           .then(() => timeout(0))
           .then(() => observer.next(1));
       }),
-      observable<number>(observer => {
+      new Observable<number>(observer => {
         observer
           .next(2)
           .then(() => timeout(10))
           .then(() => observer.next(22))
           .then(() => observer.complete());
       }),
-      observable<number>(observer => {
+      new Observable<number>(observer => {
         observer.next(3);
       })
     ]).subscribe({

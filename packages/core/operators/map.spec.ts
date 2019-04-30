@@ -1,11 +1,11 @@
 import { map } from "./map";
 import { timeout } from "../timeout";
-import { observable } from "../observable";
+import { Observable } from "../observable";
 
 describe("observable", () => {
   it("::map", async () => {
     const result: string[] = [];
-    observable<number>(observer => {
+    new Observable<number>(observer => {
       observer.next(2);
       observer.next(3);
     })

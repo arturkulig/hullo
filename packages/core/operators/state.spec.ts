@@ -1,7 +1,7 @@
 import { state } from "./state";
 import { timeout } from "../timeout";
 import { of } from "../of";
-import { Observer, observable } from "../observable";
+import { Observer, Observable } from "../observable";
 
 describe("State", () => {
   it("regular", async () => {
@@ -10,7 +10,7 @@ describe("State", () => {
       next: _n => Promise.resolve(),
       complete: () => Promise.resolve()
     };
-    const s = observable<number>(observer => {
+    const s = new Observable<number>(observer => {
       remoteObserver = observer;
       return () => {};
     }).pipe(state(0));
@@ -33,7 +33,7 @@ describe("State", () => {
 
   it("when message is immediately released, default message is omitted from the output", async () => {
     const result: number[] = [];
-    observable(observer => {
+    new Observable<number>(observer => {
       observer.next(9);
     })
       .pipe(state(1))
@@ -46,7 +46,7 @@ describe("State", () => {
   });
 
   it("latter sub gets last value", async () => {
-    const s = observable<number>(observer => {
+    const s = new Observable<number>(observer => {
       of([1, 2, 4, 6]).subscribe({
         next(v) {
           return observer.next(v);

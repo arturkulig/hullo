@@ -1,10 +1,10 @@
-import { channel } from "./channel";
+import { Channel } from "./channel";
 import { timeout } from "./timeout";
 
 describe("channel", () => {
   it("passes messages", async () => {
     const result: (number | null)[] = [];
-    const ch = channel<number>();
+    const ch = new Channel<number>();
 
     ch.subscribe({
       next(v) {
@@ -25,7 +25,7 @@ describe("channel", () => {
 
   it("closes", async () => {
     const result: (number | null)[] = [];
-    const ch = channel<number>();
+    const ch = new Channel<number>();
     const sink = {
       next(v: number) {
         result.push(v);
@@ -49,7 +49,7 @@ describe("channel", () => {
 
   it("releases one unsafely", async () => {
     const result: (number | null)[] = [];
-    const ch = channel<number>();
+    const ch = new Channel<number>();
 
     await Promise.all([
       (async () => {
@@ -76,13 +76,13 @@ describe("channel", () => {
 
   it("releases one safely", async () => {
     const result: (number | null)[] = [];
-    const ch = channel<number>();
+    const ch = new Channel<number>();
 
     await Promise.all([
       (async () => {
         while (true) {
           const next = await ch.tryTake();
-          if (next.closed) {
+          if (next.closed === true) {
             result.push(null);
             return;
           }

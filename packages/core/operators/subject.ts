@@ -1,72 +1,49 @@
-import { Observer, Observable, Subscription, observable } from "../observable";
+import {
+  Observer,
+  Observable,
+  Subscription,
+  ComplexProducer,
+  Cancellation
+} from "../observable";
 
-type SubjectWideContext<T> = {
-  sourceSub: Subscription | undefined;
-  source: Observable<T>;
-  observers: Observer<T>[];
-};
-
-interface SubjectContext<T> {
-  wide: SubjectWideContext<T>;
-  observer: Observer<T> | undefined;
-}
-
-export function subject<T>(source: Observable<T>): Observable<T> {
-  return observable<T, SubjectContext<T>, SubjectWideContext<T>>(
-    subjectProduce,
-    subjectContext,
-    {
-      source,
-      sourceSub: undefined,
-      observers: []
-    }
+export function subject<T>(source: Observable<T>) {
+  return new Observable<T>(
+    new SubjectProducer<T>(source, {
+      observers: [],
+      sourceSub: undefined
+    })
   );
 }
 
-function subjectContext<T>(arg: SubjectWideContext<T>): SubjectContext<T> {
-  return {
-    wide: arg,
-    observer: undefined
-  };
-}
+class SubjectProducer<T> implements ComplexProducer<T> {
+  constructor(
+    private source: Observable<T>,
+    private context: SubjectContext<T>
+  ) {}
 
-function subjectProduce<T>(this: SubjectContext<T>, observer: Observer<T>) {
-  this.observer = observer;
-  this.wide.observers.push(observer);
-  this.wide.sourceSub =
-    this.wide.sourceSub ||
-    this.wide.source.subscribe(new BroadcastObserver(this.wide));
+  subscribe(observer: Observer<T>) {
+    this.context.observers.push(observer);
 
-  return subjectCancel;
-}
-
-function subjectCancel<T>(this: SubjectContext<T>) {
-  if (!this.observer) {
-    return;
-  }
-  const pos = this.wide.observers.indexOf(this.observer);
-  if (pos >= 0) {
-    this.wide.observers.splice(pos, 1);
-    if (this.wide.observers.length === 0) {
-      const { sourceSub } = this.wide;
-      this.wide.sourceSub = undefined;
-      if (sourceSub && !sourceSub.closed) {
-        sourceSub.cancel();
-      }
+    if (!this.context.sourceSub) {
+      this.context.sourceSub = this.source.subscribe(
+        new SubjectSourceObserver<T>(this.context)
+      );
     }
+
+    return new SubjectCancel<T>(observer, this.context);
   }
 }
 
-class BroadcastObserver<T> implements Observer<T, BroadcastObserver<T>> {
+class SubjectSourceObserver<T> implements Observer<T> {
   get closed() {
-    return this._wide.observers.length > 0;
+    return this.context.observers.length === 0;
   }
 
-  constructor(private _wide: SubjectWideContext<T>) {}
+  constructor(private context: SubjectContext<T>) {}
 
   next(value: T) {
     const deliveries: Promise<void>[] = [];
-    const { observers } = this._wide;
+    const { observers } = this.context;
     for (let i = 0, l = observers.length; i < l; i++) {
       const delivery = observers[i].next(value);
       deliveries.push(delivery);
@@ -76,8 +53,8 @@ class BroadcastObserver<T> implements Observer<T, BroadcastObserver<T>> {
 
   complete() {
     const deliveries: Promise<void>[] = [];
-    this._wide.sourceSub = undefined;
-    const observers = this._wide.observers.splice(0);
+    this.context.sourceSub = undefined;
+    const observers = this.context.observers.splice(0);
     for (let i = 0, l = observers.length; i < l; i++) {
       const delivery = observers[i].complete();
       deliveries.push(delivery);
@@ -85,3 +62,30 @@ class BroadcastObserver<T> implements Observer<T, BroadcastObserver<T>> {
     return deliveries.length ? Promise.all(deliveries) : Promise.resolve();
   }
 }
+
+class SubjectCancel<T> implements Cancellation {
+  constructor(
+    private observer: Observer<T>,
+    private context: SubjectContext<T>
+  ) {}
+
+  cancel() {
+    const pos = this.context.observers.indexOf(this.observer);
+    if (pos >= 0) {
+      this.context.observers.splice(pos, 1);
+
+      if (this.context.observers.length === 0 && this.context.sourceSub) {
+        const { sourceSub } = this.context;
+        this.context.sourceSub = undefined;
+        if (!sourceSub.closed) {
+          sourceSub.cancel();
+        }
+      }
+    }
+  }
+}
+
+type SubjectContext<T> = {
+  sourceSub: Subscription | undefined;
+  observers: Observer<T>[];
+};

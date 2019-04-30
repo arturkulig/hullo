@@ -1,6 +1,6 @@
 import { subject } from "./subject";
 import { timeout } from "../timeout";
-import { observable, Observer } from "../observable";
+import { Observable, Observer } from "../observable";
 
 describe("observable", () => {
   it("subject", async () => {
@@ -14,7 +14,7 @@ describe("observable", () => {
       complete: () => Promise.resolve()
     };
 
-    const s = observable<number>(observer => {
+    const source = new Observable<number>(observer => {
       sourceProducerCalled++;
       remoteObserver = observer;
       return () => {
@@ -29,7 +29,7 @@ describe("observable", () => {
     // gonna be ignored
     remoteObserver.next(4);
 
-    s.subscribe({
+    source.subscribe({
       next: n => {
         results1.push(n);
       },
@@ -42,7 +42,7 @@ describe("observable", () => {
 
     await new Promise(r => setTimeout(r, 1000));
 
-    s.subscribe({
+    source.subscribe({
       next: n => {
         results2.push(n);
         return timeout(n);
@@ -53,10 +53,11 @@ describe("observable", () => {
       }
     });
 
-    remoteObserver
-      .next(7)
-      .then(() => remoteObserver.next(8))
-      .then(() => remoteObserver.complete());
+    (async () => {
+      await remoteObserver.next(7);
+      await remoteObserver.next(8);
+      await remoteObserver.complete();
+    })();
 
     await new Promise(r => setTimeout(r, 1000));
 

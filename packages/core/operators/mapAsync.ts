@@ -1,67 +1,55 @@
-import { Subscription, Observable, observable, Observer } from "../observable";
+import {
+  Subscription,
+  Observable,
+  Observer,
+  ComplexProducer,
+  Cancellation
+} from "../observable";
 
-export function mapAsync<T, U>(xf: (v: T) => Promise<U>) {
+export function mapAsync<T, U>(xf: XF<T, U>) {
   return function mapAsyncI(source: Observable<T>): Observable<U> {
-    return observable<U, MapAsyncContext<T, U>, MapAsyncArg<T, U>>(
-      mapAsyncProducer,
-      mapAsyncContext,
-      { xf, source }
+    return new Observable<U>(new MapAsyncProducer<T, U>(source, xf));
+  };
+}
+
+class MapAsyncProducer<T, U> implements ComplexProducer<U> {
+  constructor(private source: Observable<T>, private xf: XF<T, U>) {}
+
+  subscribe(observer: Observer<U>) {
+    const sub = this.source.subscribe(
+      new MapAsyncSourceObserver<T, U>(this.xf, observer)
     );
-  };
-}
-
-interface MapAsyncArg<T, U> {
-  xf: (v: T) => Promise<U>;
-  source: Observable<T>;
-}
-
-interface MapAsyncContext<T, U> {
-  xf: (v: T) => Promise<U>;
-  source: Observable<T>;
-  sub: Subscription | undefined;
-}
-
-interface MapAsyncSubContext<T, U> {
-  xf: (v: T) => Promise<U>;
-  observer: Observer<U>;
-}
-
-function mapAsyncContext<T, U>(arg: MapAsyncArg<T, U>): MapAsyncContext<T, U> {
-  return {
-    xf: arg.xf,
-    source: arg.source,
-    sub: undefined
-  };
-}
-
-function mapAsyncProducer<T, U>(
-  this: MapAsyncContext<T, U>,
-  observer: Observer<U>
-) {
-  this.sub = this.source.subscribe(
-    {
-      next: mapAsyncNext,
-      complete: mapAsyncComplete
-    },
-    {
-      xf: this.xf,
-      observer
-    }
-  );
-
-  return mapAsyncCancel;
-}
-
-function mapAsyncCancel<T, U>(this: MapAsyncContext<T, U>) {
-  if (this.sub && !this.sub.closed) {
-    this.sub.cancel();
+    return new MapAsyncCancel(sub);
   }
 }
 
-function mapAsyncNext<T, U>(this: MapAsyncSubContext<T, U>, t: T) {
-  return this.xf(t).then(u => this.observer.next(u));
+class MapAsyncSourceObserver<T, U> {
+  get closed() {
+    return this.observer.closed;
+  }
+
+  constructor(private xf: XF<T, U>, private observer: Observer<U>) {}
+
+  next(valueT: T) {
+    const { xf } = this;
+    return xf(valueT).then(valueU => this.observer.next(valueU));
+  }
+
+  complete() {
+    return this.observer.complete();
+  }
 }
 
-function mapAsyncComplete<T, U>(this: MapAsyncSubContext<T, U>) {
-  return this.observer.complete();
+class MapAsyncCancel implements Cancellation {
+  constructor(private sub: Subscription) {}
+
+  cancel() {
+    if (!this.sub.closed) {
+      this.sub.cancel();
+    }
+  }
+}
+
+interface XF<T, U> {
+  (v: T): Promise<U>;
 }

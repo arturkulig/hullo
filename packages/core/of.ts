@@ -1,82 +1,52 @@
-import { Observable, Observer, observable } from "./observable";
+import {
+  Observable,
+  Observer,
+  ComplexProducer,
+  Cancellation
+} from "./observable";
 
 export function of<T>(
   source: AsyncIterable<T> | Iterable<T> | T
 ): Observable<T> {
   if (typeof source === "object" && Symbol.asyncIterator in source) {
     const asyncSource = source as AsyncIterable<T>;
-    return observable<T, AsyncSourceContext<T>, AsyncSourceArg<T>>(
-      asyncSourceProduce,
-      asyncSourceContext,
-      asyncSource
-    );
+    return new Observable<T>(new AsyncSourceProducer(asyncSource));
   }
   if (typeof source === "object" && Symbol.iterator in source) {
     const syncSource = source as Iterable<T>;
-    return observable<T, SyncSourceContext<T>, SyncSourceArg<T>>(
-      syncSourceProduce,
-      syncSourceContext,
-      syncSource
-    );
+    return new Observable<T>(new SyncSourceProducer(syncSource));
   }
   const unitSource = source as T;
-  return observable<T, UnitContext<T>, UnitArg<T>>(
-    unitProducer,
-    unitContext,
-    unitSource
-  );
+  return new Observable<T>(new UnitProducer(unitSource));
 }
 
 // ::of async iterable
 
-type AsyncSourceArg<T> = AsyncIterable<T>;
-
 interface AsyncSourceContext<T> {
+  observer: Observer<T>;
   asyncIterable: AsyncIterable<T>;
-  asyncIterator?: AsyncIterator<T>;
-  resultHandler?: (r: IteratorResult<T>) => void;
+  asyncIterator: AsyncIterator<T>;
   retrieving: boolean;
   drained: boolean;
   cancelled: boolean;
 }
 
-function asyncSourceContext<T>(arg: AsyncSourceArg<T>): AsyncSourceContext<T> {
-  return {
-    asyncIterable: arg,
-    retrieving: false,
-    drained: false,
-    cancelled: false
-  };
-}
+class AsyncSourceProducer<T> implements ComplexProducer<T> {
+  constructor(private source: AsyncIterable<T>) {}
 
-function asyncSourceProduce<T>(
-  this: AsyncSourceContext<T>,
-  observer: Observer<T>
-) {
-  this.resultHandler = (iteration: IteratorResult<T>) => {
-    this.retrieving = false;
-    if (this.cancelled && this.asyncIterator && this.asyncIterator.return) {
-      this.asyncIterator.return();
-    }
-    if (this.drained || this.cancelled) {
-      return;
-    }
-    if (iteration.done) {
-      this.drained = true;
-      observer.complete().then(() => asyncSourceIterate(this));
-    } else {
-      observer.next(iteration.value).then(() => asyncSourceIterate(this));
-    }
-  };
-  asyncSourceIterate(this);
+  subscribe(observer: Observer<T>) {
+    const context: AsyncSourceContext<T> = {
+      observer,
+      asyncIterable: this.source,
+      asyncIterator: this.source[Symbol.asyncIterator](),
+      retrieving: false,
+      drained: false,
+      cancelled: false
+    };
 
-  return asyncSourceCancel;
-}
+    asyncSourceIterate(context);
 
-function asyncSourceCancel<T>(this: AsyncSourceContext<T>) {
-  this.cancelled = true;
-  if (!this.retrieving && this.asyncIterator && this.asyncIterator.return) {
-    this.asyncIterator.return();
+    return new AsyncSourceCancel(context);
   }
 }
 
@@ -93,44 +63,75 @@ function asyncSourceIterate<T>(context: AsyncSourceContext<T>) {
   }
 
   context.retrieving = true;
-  (
-    context.asyncIterator ||
-    (context.asyncIterator = context.asyncIterable[Symbol.asyncIterator]())
-  )
+  context.asyncIterator
     .next()
-    .then(context.resultHandler);
+    .then(iteration => resultHandler(context, iteration));
 }
 
-// ::of async iterable
+function resultHandler<T>(
+  context: AsyncSourceContext<T>,
+  iteration: IteratorResult<T>
+) {
+  context.retrieving = false;
+  if (
+    context.cancelled &&
+    context.asyncIterator &&
+    context.asyncIterator.return
+  ) {
+    context.asyncIterator.return();
+  }
+  if (context.drained || context.cancelled) {
+    return;
+  }
+  if (iteration.done) {
+    context.drained = true;
+    context.observer.complete().then(() => asyncSourceIterate(context));
+  } else {
+    context.observer
+      .next(iteration.value)
+      .then(() => asyncSourceIterate(context));
+  }
+}
 
-type SyncSourceArg<T> = Iterable<T>;
+class AsyncSourceCancel<T> implements Cancellation {
+  constructor(private context: AsyncSourceContext<T>) {}
+
+  cancel() {
+    this.context.cancelled = true;
+    if (
+      !this.context.retrieving &&
+      this.context.asyncIterator &&
+      this.context.asyncIterator.return
+    ) {
+      this.context.asyncIterator.return();
+    }
+  }
+}
+
+// ::of sync iterable
 
 interface SyncSourceContext<T> {
+  observer: Observer<T>;
   iterable: Iterable<T>;
   iterator?: Iterator<T>;
-  observer?: Observer<T>;
-  cancelled: boolean;
   drained: boolean;
+  cancelled: boolean;
 }
 
-function syncSourceContext<T>(arg: SyncSourceArg<T>): SyncSourceContext<T> {
-  return { iterable: arg, cancelled: false, drained: false };
-}
+class SyncSourceProducer<T> implements ComplexProducer<T> {
+  constructor(private source: Iterable<T>) {}
 
-function syncSourceProduce<T>(
-  this: SyncSourceContext<T>,
-  observer: Observer<T>
-) {
-  this.observer = observer;
-  syncSourceIterate(this);
+  subscribe(observer: Observer<T>) {
+    const context: SyncSourceContext<T> = {
+      observer,
+      iterable: this.source,
+      drained: false,
+      cancelled: false
+    };
 
-  return syncSourceCancel;
-}
+    syncSourceIterate(context);
 
-function syncSourceCancel<T>(this: SyncSourceContext<T>) {
-  this.cancelled = true;
-  if (this.iterator && this.iterator.return) {
-    this.iterator.return();
+    return new SyncSourceCancel(context);
   }
 }
 
@@ -157,41 +158,27 @@ function syncSourceIterate<T>(context: SyncSourceContext<T>) {
   }
 }
 
+class SyncSourceCancel<T> implements Cancellation {
+  constructor(private context: SyncSourceContext<T>) {}
+
+  cancel() {
+    this.context.cancelled = true;
+    if (this.context.iterator && this.context.iterator.return) {
+      this.context.iterator.return();
+    }
+  }
+}
 // ::of single value
 
-type UnitArg<T> = T;
+class UnitProducer<T> implements ComplexProducer<T> {
+  constructor(private value: T) {}
 
-interface UnitContext<T> {
-  value: T;
-  closed: boolean;
-  observer?: Observer<T>;
-}
-
-function unitContext<T>(arg: UnitArg<T>): UnitContext<T> {
-  return {
-    value: arg,
-    closed: false
-  };
-}
-
-function unitProducer<T>(this: UnitContext<T>, observer: Observer<T>) {
-  this.observer = observer;
-  observer.next(this.value).then(() => unitClose(this));
-
-  return unitCancel;
-}
-
-function unitClose<T>(context: UnitContext<T>) {
-  if (context.closed) {
-    return;
+  subscribe(observer: Observer<T>) {
+    observer.next(this.value).then(() => {
+      if (observer.closed) {
+        return;
+      }
+      observer.complete();
+    });
   }
-  context.closed = true;
-  context.observer!.complete();
-}
-
-function unitCancel<T>(this: UnitContext<T>) {
-  if (this.closed) {
-    return;
-  }
-  this.closed = true;
 }

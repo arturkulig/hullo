@@ -1,100 +1,92 @@
-import { observable } from "@hullo/core/observable";
-import { duplex } from "@hullo/core/duplex";
-import { map } from "@hullo/core/operators/map";
+import {
+  Observable,
+  ComplexProducer,
+  Observer,
+  Cancellation
+} from "@hullo/core/observable";
+import { Duplex } from "@hullo/core/duplex";
 
-export function ofEventEmitter(
+export function ofEventEmitter<DATA extends any[] = any[]>(
   emitter: NodeJS.EventEmitter,
   valueName: string,
   completionName?: string
 ) {
-  return duplex<any[], any[]>(
-    observable<any[]>(observer => {
-      function next(...args: any[]) {
-        observer.next(args);
-      }
-      function complete() {
-        observer.complete();
-      }
-
-      emitter.on(valueName, next);
-      if (completionName) {
-        emitter.on(completionName, complete);
-      }
-
-      return () => {
-        emitter.off(valueName, next);
-        if (completionName) {
-          emitter.off(completionName, complete);
-        }
-      };
-    }),
-    {
-      get closed() {
-        return false;
-      },
-
-      next(args: any[]) {
-        emitter.emit(valueName, ...args);
-        return Promise.resolve();
-      },
-
-      complete() {
-        return Promise.resolve();
-      }
-    }
-  );
-}
-
-export function ofEventEmitterV<V>(
-  emitter: NodeJS.EventEmitter,
-  valueName: string,
-  completionName?: string
-) {
-  const int = ofEventEmitter(emitter, valueName, completionName);
-  return duplex<V, V>(int.pipe(map(([v]): V => v)), {
-    get closed() {
-      return int.closed;
-    },
-
-    next(v) {
-      return int.next([v]);
-    },
-
-    complete() {
-      return int.complete();
-    }
-  });
-}
-
-type Result<V, E> = { ok: true; value: V } | { ok: false; error: E; value?: V };
-
-export function ofEventEmitterVE<V, E = Error>(
-  emitter: NodeJS.EventEmitter,
-  valueName: string,
-  completionName?: string
-) {
-  const int = ofEventEmitter(emitter, valueName, completionName);
-  return duplex<Result<V, E>, Result<V, E>>(
-    int.pipe(
-      map(
-        ([e, v]): Result<V, E> =>
-          e == null ? { ok: true, value: v } : { ok: false, error: e }
-      )
+  return new Duplex<DATA, DATA>(
+    new Observable<DATA>(
+      new EventsProducer<DATA>(emitter, valueName, completionName)
     ),
-    {
-      get closed() {
-        return int.closed;
-      },
-
-      next(result) {
-        return int.next(
-          result.ok ? [null, result.value] : [result.error, result.value]
-        );
-      },
-
-      complete() {
-        return int.complete();
-      }
-    }
+    new EventsBroadcast(emitter, valueName, completionName)
   );
+}
+
+class EventsBroadcast<DATA extends any[]> implements Observer<DATA> {
+  get closed() {
+    return false;
+  }
+
+  constructor(
+    private emitter: NodeJS.EventEmitter,
+    private valueName: string,
+    private completionName?: string
+  ) {}
+
+  next(args: any[]) {
+    this.emitter.emit(this.valueName, ...args);
+    return Promise.resolve();
+  }
+
+  complete() {
+    if (this.completionName) {
+      this.emitter.emit(this.completionName);
+    }
+    return Promise.resolve();
+  }
+}
+
+class EventsProducer<DATA extends any[]> implements ComplexProducer<DATA> {
+  constructor(
+    private emitter: NodeJS.EventEmitter,
+    private valueName: string,
+    private completionName?: string
+  ) {}
+
+  subscribe(observer: Observer<DATA>) {
+    function next(...args: any[]) {
+      observer.next(args as DATA);
+    }
+
+    function complete() {
+      observer.complete();
+    }
+
+    this.emitter.on(this.valueName, next);
+    if (this.completionName) {
+      this.emitter.on(this.completionName, complete);
+    }
+
+    return new EventsCancel(
+      this.emitter,
+      this.valueName,
+      next,
+      this.completionName,
+      complete
+    );
+  }
+}
+
+class EventsCancel implements Cancellation {
+  constructor(
+    private emitter: NodeJS.EventEmitter,
+    private valueName: string,
+    private next: (...args: any[]) => any,
+    private completionName?: string,
+    private complete?: (...args: any[]) => any
+  ) {}
+
+  cancel() {
+    this.emitter.off(this.valueName, this.next);
+    if (this.completionName && this.complete) {
+      this.emitter.off(this.completionName, this.complete);
+    }
+  }
 }

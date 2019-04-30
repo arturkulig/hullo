@@ -1,49 +1,47 @@
-import { Observable, Observer, observable } from "./observable";
+import {
+  Observable,
+  Observer,
+  ComplexProducer,
+  Cancellation
+} from "./observable";
 
 export function interval(time: number): Observable<number> {
-  return observable<Number, IntervalContext, IntervalArg>(
-    intervalProducer,
-    intervalContext,
-    time
-  );
+  return new Observable<number>(new IntervalProducer(time));
 }
 
-function intervalContext(arg: IntervalArg): IntervalContext {
-  return {
-    token: undefined,
-    time: arg
-  };
-}
+class IntervalProducer implements ComplexProducer<number> {
+  constructor(private time: number) {}
 
-function intervalProducer(this: IntervalContext, observer: Observer<number>) {
-  this.observer = observer;
-  intervalTrigger(this);
+  subscribe(observer: Observer<number>) {
+    const context: IntervalContext = {
+      observer,
+      token: null,
+      schedule: () => {
+        context.token = setTimeout(intervalCallback, this.time, context);
+      }
+    };
+    context.schedule();
 
-  return intervalCancel;
-}
-
-function intervalTrigger(ctx: IntervalContext) {
-  ctx.token = setTimeout(
-    (ctx: IntervalContext) => {
-      ctx.observer!.next(Date.now()).then(() => {
-        intervalTrigger(ctx);
-      });
-    },
-    ctx.time,
-    ctx
-  );
-}
-
-function intervalCancel(this: IntervalContext) {
-  if (this.token) {
-    clearTimeout(this.token);
+    return new IntervalCancel(context);
   }
 }
 
-type IntervalArg = number;
+function intervalCallback(context: IntervalContext) {
+  context.observer.next(Date.now()).then(context.schedule);
+}
+
+class IntervalCancel implements Cancellation {
+  constructor(private context: IntervalContext) {}
+
+  cancel() {
+    if (this.context.token) {
+      clearTimeout(this.context.token);
+    }
+  }
+}
 
 interface IntervalContext {
-  observer?: Observer<number>;
-  time: number;
+  observer: Observer<number>;
   token: any;
+  schedule: () => any;
 }

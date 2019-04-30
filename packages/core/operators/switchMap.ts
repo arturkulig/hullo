@@ -1,94 +1,113 @@
-import { observable, Observable, Observer, Subscription } from "../observable";
+import {
+  Observable,
+  Observer,
+  Subscription,
+  ComplexProducer,
+  Cancellation
+} from "../observable";
 
 export function switchMap<T, U>(xf: (v: T) => Observable<U>) {
-  return function switchMapI(source: Observable<T>): Observable<U> {
-    return observable<U, SwitchMapContext<T, U>, SwitchMapArg<T, U>>(
-      switchMapProducer,
-      switchMapContext,
-      {
-        xf,
-        source
-      }
-    );
+  return function switchMapI(source: Observable<T>) {
+    return new Observable<U>(new SwitchMapProducer<T, U>(xf, source));
   };
 }
 
-interface SwitchMapArg<T, U> {
-  xf: (v: T) => Observable<U>;
-  source: Observable<T>;
+class SwitchMapProducer<T, U> implements ComplexProducer<U> {
+  constructor(
+    private xf: (v: T) => Observable<U>,
+    private source: Observable<T>
+  ) {}
+
+  subscribe(observer: Observer<U>) {
+    const context: SwitchMapContext<T, U> = {
+      mainCompleted: false,
+      innerSub: undefined,
+      xf: this.xf,
+      outerObserver: observer
+    };
+
+    const sub = this.source.subscribe(new SwitchMapObserver<T, U>(context));
+
+    return new SwitchMapCancel(sub, context);
+  }
+}
+
+class SwitchMapCancel<T, U> implements Cancellation {
+  constructor(
+    private sub: Subscription,
+    private context: SwitchMapContext<T, U>
+  ) {}
+
+  cancel() {
+    if (this.sub && !this.sub.closed) {
+      this.sub.cancel();
+    }
+    if (this.context.innerSub && !this.context.innerSub.closed) {
+      this.context.innerSub.cancel();
+    }
+  }
+}
+
+class SwitchMapObserver<T, U> implements Observer<T> {
+  get closed() {
+    return this.context.outerObserver.closed;
+  }
+
+  constructor(private context: SwitchMapContext<T, U>) {}
+
+  next(value: T) {
+    if (this.context.innerSub && !this.context.innerSub.closed) {
+      this.context.innerSub.cancel();
+    }
+
+    const {
+      context: { xf }
+    } = this;
+    this.context.innerSub = xf(value).subscribe(
+      new InnerSwitchMapObserver<T, U>(this.context)
+    );
+
+    return Promise.resolve();
+  }
+
+  complete() {
+    this.context.mainCompleted = true;
+    if (this.context.innerSub == null) {
+      return this.context.outerObserver.complete();
+    }
+    return Promise.resolve();
+  }
+}
+
+class InnerSwitchMapObserver<T, U> implements Observer<U> {
+  get closed() {
+    return this.context.outerObserver.closed;
+  }
+
+  constructor(private context: SwitchMapContext<T, U>) {}
+
+  next(value: U) {
+    if (this.context.outerObserver.closed) {
+      return Promise.resolve();
+    }
+    return this.context.outerObserver.next(value);
+  }
+
+  complete() {
+    if (this.context.outerObserver.closed) {
+      return Promise.resolve();
+    }
+    this.context.innerSub = undefined;
+    if (this.context.mainCompleted) {
+      return this.context.outerObserver.complete();
+    }
+    return Promise.resolve();
+  }
 }
 
 interface SwitchMapContext<T, U> {
   xf: (v: T) => Observable<U>;
-  source: Observable<T>;
-  sub: Subscription | undefined;
+  outerObserver: Observer<U>;
+  mainCompleted: boolean;
   innerSub: Subscription | undefined;
-}
-
-interface SwitchMapSubContext<T, U> {
-  context: SwitchMapContext<T, U>;
-  observer: Observer<U>;
-}
-
-function switchMapContext<T, U>(
-  arg: SwitchMapArg<T, U>
-): SwitchMapContext<T, U> {
-  return {
-    xf: arg.xf,
-    source: arg.source,
-    sub: undefined,
-    innerSub: undefined
-  };
-}
-
-function switchMapProducer<T, U>(
-  this: SwitchMapContext<T, U>,
-  observer: Observer<U>
-) {
-  const subCtx: SwitchMapSubContext<T, U> = { observer, context: this };
-  this.sub = this.source.subscribe(
-    {
-      next: switchMapNext,
-      complete: switchMapComplete
-    },
-    subCtx
-  );
-
-  return switchMapCancel;
-}
-
-function switchMapCancel<T, U>(this: SwitchMapContext<T, U>) {
-  if (this.sub && !this.sub.closed) {
-    this.sub.cancel();
-  }
-}
-
-function switchMapNext<T, U>(this: SwitchMapSubContext<T, U>, value: T) {
-  if (this.context.innerSub && !this.context.innerSub.closed) {
-    this.context.innerSub.cancel();
-  }
-
-  this.context.innerSub = this.context.xf(value).subscribe(
-    {
-      next: switchMapInnerNext,
-      complete: switchMapInnerComplete
-    },
-    this
-  );
-}
-
-function switchMapInnerNext<T, U>(this: SwitchMapSubContext<T, U>, value: U) {
-  return this.observer.next(value);
-}
-
-function switchMapInnerComplete<T, U>(this: SwitchMapSubContext<T, U>) {
-  if (this.context.sub == null || this.context.sub.closed) {
-    return this.observer.complete();
-  }
-}
-
-function switchMapComplete<T, U>(this: SwitchMapSubContext<T, U>) {
-  if (this.context.innerSub == null || this.context.innerSub.closed) {
-    return this.observer.complete();
-  }
 }

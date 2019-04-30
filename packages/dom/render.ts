@@ -6,13 +6,8 @@ import {
   Subscription
 } from "@hullo/core/observable";
 
-interface RenderCancellation<CTX = Possesion> {
-  (this: CTX, element: HTMLElement, abandonment: boolean): void;
-}
-
-interface Possesion<CTX = any> {
-  // abandon: RenderCancellation;
-  clean: RenderCancellation<CTX>;
+interface Possesion {
+  clean(element: HTMLElement, abandonment: boolean): void;
 }
 
 export function render(shape: DOMElement) {
@@ -82,53 +77,27 @@ export function mold(
   }
 
   if (elementShape.deref) {
-    const dp: DerefPossesion = {
-      shape: elementShape,
-      clean: derefCancel
-    };
-    possesions.push(dp);
+    possesions.push(new DerefPossesion(elementShape));
   }
 
-  return {
-    possesions,
-    clean: joinedPossesionsCancel
-  };
+  return new JoinedPossesions(possesions);
 }
 
-interface JoinedPossesions extends Possesion<JoinedPossesions> {
-  possesions: Possesion[];
-  clean(
-    this: JoinedPossesions,
-    htmlElement: HTMLElement,
-    abandonment: boolean
-  ): void;
-}
+class JoinedPossesions implements Possesion {
+  constructor(private possesions: Possesion[]) {}
 
-function joinedPossesionsCancel(
-  this: JoinedPossesions,
-  htmlElement: HTMLElement,
-  abandonment: boolean
-) {
-  for (let i = 0; i < this.possesions.length; i++) {
-    this.possesions[i].clean(htmlElement, abandonment);
+  clean(htmlElement: HTMLElement, abandonment: boolean) {
+    for (let i = 0; i < this.possesions.length; i++) {
+      this.possesions[i].clean(htmlElement, abandonment);
+    }
   }
 }
 
-interface DerefPossesion extends Possesion<DerefPossesion> {
-  shape: DOMElement;
-  clean(
-    this: DerefPossesion,
-    htmlElement: HTMLElement,
-    abandonment: boolean
-  ): void;
-}
-
-function derefCancel(
-  this: DerefPossesion,
-  htmlElement: HTMLElement,
-  _abandonment: boolean
-) {
-  this.shape.deref!(htmlElement);
+class DerefPossesion implements Possesion {
+  constructor(private shape: DOMElement) {}
+  clean(htmlElement: HTMLElement, _abandonment: boolean) {
+    this.shape.deref!(htmlElement);
+  }
 }
 
 type In<T, N extends keyof T> = T[N];
@@ -166,22 +135,15 @@ function render_children_each(
   nextShapes: Array<DOMElement>,
   children: ChildrenRegistry
 ) {
-  const {
-    shapes,
-    elements,
-    possesions
-    //  abandons
-  } = children;
+  const { shapes, elements, possesions } = children;
 
   const nextElements: typeof elements = [];
   const nextPossesions: typeof possesions = [];
-  // const nextAbandons: typeof abandons = [];
 
   for (let i = 0; i < Math.max(shapes.length, nextShapes.length); i++) {
     const currentShape = shapes[i];
     const currentElement = elements[i];
     const currentPossesion = possesions[i];
-    // const currentAbandon = abandons[i];
     const nextShape = nextShapes[i];
     let nextShapePrevPos = -1;
 
@@ -193,7 +155,6 @@ function render_children_each(
     ) {
       nextElements.push(elements[i]);
       nextPossesions.push(possesions[i]);
-      // nextAbandons.push(abandons[i]);
     }
 
     // element exists and should be moved
@@ -204,7 +165,6 @@ function render_children_each(
     ) {
       nextElements.push(elements[nextShapePrevPos]);
       nextPossesions.push(possesions[nextShapePrevPos]);
-      // nextAbandons.push(abandons[nextShapePrevPos]);
     }
 
     //element remains
@@ -224,121 +184,114 @@ function render_children_each(
 
     // element adding
     else if (i < nextShapes.length) {
-      const {
-        element,
-        // abandon,
-        possesion
-      } = render_internal(nextShape, syncOptions);
+      const { element, possesion } = render_internal(nextShape, syncOptions);
       nextElements.push(element);
-      // nextAbandons.push(abandon);
       nextPossesions.push(possesion);
-    }
-
-    //
-    else if (i < shapes.length) {
-      // currentAbandon(currentElement);
     }
   }
 
   // diff
-  let leftI = 0;
-  let rightI = 0;
-  while (leftI < elements.length && rightI < nextElements.length) {
-    const leftLength = elements.length;
-    const rightLength = nextElements.length;
+  let currVec = 0;
+  let nextVec = 0;
+  while (currVec < elements.length && nextVec < nextElements.length) {
+    const currLen = elements.length;
+    const nextLen = nextElements.length;
 
-    const current = elements[leftI];
-    const next = nextElements[rightI];
+    const currElem = elements[currVec];
+    const nextElem = nextElements[nextVec];
 
-    if (current === next) {
-      leftI++;
-      rightI++;
+    if (currElem === nextElem) {
+      currVec++;
+      nextVec++;
       continue;
     }
 
-    const currentInNext = nextElements.indexOf(current, rightI);
-    if (currentInNext < 0) {
-      htmlElement.removeChild(current);
-      leftI++;
+    const currElementAtNext = nextElements.indexOf(currElem, nextVec);
+    if (currElementAtNext < 0) {
+      htmlElement.removeChild(currElem);
+      currVec++;
       continue;
     }
 
-    const nextInCurrent = elements.indexOf(next, leftI);
-    if (nextInCurrent < 0) {
-      if (leftI < leftLength) {
-        htmlElement.insertBefore(next, elements[leftI]);
+    const nextElementAtCurr = elements.indexOf(nextElem, currVec);
+    if (nextElementAtCurr < 0) {
+      if (currVec < currLen) {
+        htmlElement.insertBefore(nextElem, elements[currVec]);
       } else {
-        htmlElement.appendChild(next);
+        htmlElement.appendChild(nextElem);
       }
-      rightI++;
+      nextVec++;
       continue;
     }
 
-    let leftStableLength = 0;
+    let fromCurrVecStableLen = 0;
     for (
       let distance = 0,
-        max = Math.min(rightLength - currentInNext, leftLength - leftI);
+        max = Math.min(nextLen - currElementAtNext, currLen - currVec);
       distance < max;
       distance++
     ) {
       if (
-        elements[leftI + distance] === nextElements[currentInNext + distance]
+        elements[currVec + distance] ===
+        nextElements[currElementAtNext + distance]
       ) {
-        leftStableLength++;
+        fromCurrVecStableLen++;
       } else {
         break;
       }
     }
-    let leftStaysBenefit = rightI - currentInNext + leftStableLength;
+    let leftStaysBenefit = fromCurrVecStableLen - (currElementAtNext - nextVec);
 
-    let rightStableLength = 0;
+    let fromNextVecStableLen = 0;
     for (
       let distance = 0,
-        max = Math.min(leftLength - currentInNext, rightLength - rightI);
+        max = Math.min(currLen - nextElementAtCurr, nextLen - nextVec);
       distance < max;
       distance++
     ) {
       if (
-        elements[rightI + distance] === nextElements[currentInNext + distance]
+        elements[nextVec + distance] ===
+        nextElements[nextElementAtCurr + distance]
       ) {
-        rightStableLength++;
+        fromNextVecStableLen++;
       } else {
         break;
       }
     }
-    let rightStaysBenefit = leftI - currentInNext + rightStableLength;
+    let rightStaysBenefit =
+      fromNextVecStableLen - (nextElementAtCurr - currVec);
 
     if (leftStaysBenefit > rightStaysBenefit && rightStaysBenefit > 0) {
-      for (let i = rightI; i < currentInNext; i++) {
-        htmlElement.insertBefore(nextElements[i], current);
+      for (let i = nextVec; i < currElementAtNext; i++) {
+        htmlElement.insertBefore(nextElements[i], currElem);
       }
-      rightI += currentInNext - rightI;
+      nextVec += currElementAtNext - nextVec;
 
-      leftI += leftStableLength;
-      rightI += leftStableLength;
+      currVec += fromCurrVecStableLen;
+      nextVec += fromCurrVecStableLen;
     } else if (rightStaysBenefit >= leftStaysBenefit && leftStaysBenefit > 0) {
-      for (let i = leftI; i < nextInCurrent; i++) {
+      for (let i = currVec; i < nextElementAtCurr; i++) {
         htmlElement.removeChild(elements[i]);
       }
-      leftI += nextInCurrent - leftI;
+      currVec += nextElementAtCurr - currVec;
 
-      leftI += rightStableLength;
-      rightI += rightStableLength;
+      currVec += fromNextVecStableLen;
+      nextVec += fromNextVecStableLen;
     } else {
-      htmlElement.replaceChild(next, current);
-      leftI++;
-      rightI++;
-      elements.splice(nextInCurrent, 1);
-      shapes.splice(nextInCurrent, 1);
-      possesions.splice(nextInCurrent, 1);
+      htmlElement.replaceChild(nextElem, currElem);
+      currVec++;
+      nextVec++;
+      elements.splice(nextElementAtCurr, 1);
+      shapes.splice(nextElementAtCurr, 1);
+      possesions.splice(nextElementAtCurr, 1);
     }
   }
 
-  for (let i = leftI; i < elements.length; i++) {
+  for (let i = currVec; i < elements.length; i++) {
     htmlElement.removeChild(elements[i]);
   }
 
-  for (let i = rightI; i < nextElements.length; i++) {
+  for (let i = nextVec; i < nextElements.length; i++) {
     htmlElement.appendChild(nextElements[i]);
   }
 
@@ -365,7 +318,6 @@ function render_event_regular<NAME extends string>(
   htmlElement.addEventListener(name, handler as (event: Event) => any);
 
   return {
-    // abandon: noop,
     clean: function cancelEventListenerApplication() {
       htmlElement.removeEventListener(name, handler as (event: Event) => any);
     }
@@ -383,7 +335,6 @@ function render_event_observer<NAME extends string>(
   htmlElement.addEventListener(name, render_event_observer_listener);
 
   return {
-    // abandon: render_event_observer_cancel,
     clean: render_event_observer_cancel
   };
 
@@ -568,75 +519,80 @@ function render_each<T, S = {}>(
   process: (h: HTMLElement, o: SyncMode, v: T, s: S) => void,
   cleanup: (h: HTMLElement, o: SyncMode, s: S) => void
 ): Possesion {
-  if (
-    typeof streamOrValue === "object" &&
-    streamOrValue &&
-    (streamOrValue as any).subscribe
-  ) {
-    const observer: RenderEachObserver<T, S> = {
-      htmlElement,
-      syncMode,
-      state,
-      process,
+  if (Observable.isObservable(streamOrValue)) {
+    const isClosed = { ref: false };
+    return new RenderEachStreamPossesions<S>(
+      isClosed,
       cleanup,
-      next: render_each_next
-    };
-    const subscription = (streamOrValue as Observable<T>).subscribe(observer);
-    const repc: RenderEachPossesions<S> = {
-      cleanup,
-      subscription,
+      streamOrValue.subscribe(
+        new RenderEachObserver(isClosed, htmlElement, syncMode, state, process)
+      ),
       syncMode,
-      state,
-      clean: render_each_possesionsClean
-    };
-    return repc;
+      state
+    );
   } else {
     process(htmlElement, syncMode, streamOrValue as T, state);
-    const repc: RenderEachPossesions<S> = {
-      cleanup,
-      syncMode,
-      state,
-      clean: render_each_possesionsClean
-    };
-    return repc;
+    return new RenderEachPossesions<S>(cleanup, syncMode, state);
   }
 }
 
-interface RenderEachObserver<T, S = {}> extends Subscriber<T> {
-  htmlElement: HTMLElement;
-  syncMode: SyncMode;
-  state: S;
-  process: (h: HTMLElement, o: SyncMode, v: T, s: S) => void;
-  cleanup: (h: HTMLElement, o: SyncMode, s: S) => void;
-}
+class RenderEachObserver<T, S = {}> implements Observer<T> {
+  get closed() {
+    return this.isClosed.ref;
+  }
 
-function render_each_next<T, S>(
-  this: RenderEachObserver<T, S>,
-  singleValue: T
-) {
-  this.process(this.htmlElement, this.syncMode, singleValue, this.state);
-  if (this.syncMode !== "immediate") {
-    return whenPainted();
+  constructor(
+    private isClosed: { ref: boolean },
+    private htmlElement: HTMLElement,
+    private syncMode: SyncMode,
+    private state: S,
+    private process: (h: HTMLElement, o: SyncMode, v: T, s: S) => void
+  ) {}
+
+  next(singleValue: T) {
+    this.process(this.htmlElement, this.syncMode, singleValue, this.state);
+    if (this.syncMode !== "immediate") {
+      return whenPainted();
+    }
+    return Promise.resolve();
+  }
+
+  complete() {
+    return Promise.resolve();
   }
 }
 
-interface RenderEachPossesions<S> extends Possesion<RenderEachPossesions<S>> {
-  cleanup: (h: HTMLElement, o: SyncMode, s: S) => void;
-  subscription?: Subscription;
-  syncMode: SyncMode;
-  state: S;
+class RenderEachStreamPossesions<S> implements Possesion {
+  constructor(
+    private isClosed: { ref: boolean },
+    private cleanup: (h: HTMLElement, o: SyncMode, s: S) => void,
+    private subscription: Subscription,
+    private syncMode: SyncMode,
+    private state: S
+  ) {}
+
+  clean(htmlElement: HTMLElement, abandonment: boolean) {
+    this.isClosed.ref = true;
+    if (!abandonment) {
+      this.cleanup(htmlElement, this.syncMode, this.state);
+    }
+    if (this.subscription && !this.subscription.closed) {
+      this.subscription.cancel();
+    }
+  }
 }
 
-function render_each_possesionsClean<S>(
-  this: RenderEachPossesions<S>,
-  htmlElement: HTMLElement,
-  abandonment: boolean
-) {
-  if (!abandonment) {
-    this.cleanup(htmlElement, this.syncMode, this.state);
-  }
-  if (this.subscription && !this.subscription.closed) {
-    this.subscription.cancel();
+class RenderEachPossesions<S> implements Possesion {
+  constructor(
+    private cleanup: (h: HTMLElement, o: SyncMode, s: S) => void,
+    private syncMode: SyncMode,
+    private state: S
+  ) {}
+
+  clean(htmlElement: HTMLElement, abandonment: boolean) {
+    if (!abandonment) {
+      this.cleanup(htmlElement, this.syncMode, this.state);
+    }
   }
 }
 

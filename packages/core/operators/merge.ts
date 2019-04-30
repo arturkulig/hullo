@@ -1,84 +1,70 @@
-import { Observable, observable, Observer, Subscription } from "../observable";
+import {
+  Observable,
+  Observer,
+  Subscription,
+  ComplexProducer,
+  Cancellation
+} from "../observable";
 
-export function merge<T, U = T>(other: Observable<T>) {
+export function merge<T, U = T>(...others: Observable<T>[]) {
   return function mergeI(source: Observable<U>): Observable<T | U> {
-    return observable<T | U, MergeContext<T, U>, MergeArg<T, U>>(
-      mergeProduce,
-      mergeContext,
-      { source, other }
+    return new Observable<T | U>(new MergeProducer<T | U>([source, ...others]));
+  };
+}
+
+class MergeProducer<T> implements ComplexProducer<T> {
+  constructor(private sources: Observable<T>[]) {}
+
+  subscribe(observer: Observer<T>) {
+    const completions: Array<(() => any) | null> = this.sources.map(() => null);
+    const subs = this.sources.map((source, i) =>
+      source.subscribe(new MergeSourceObserver(i, completions, observer))
     );
-  };
-}
 
-function mergeContext<T, U>(arg: MergeArg<T, U>): MergeContext<T, U> {
-  return {
-    source: arg.source,
-    other: arg.other,
-    observer: null,
-    otherSub: null,
-    sourceSub: null
-  };
-}
-
-function mergeProduce<T, U>(
-  this: MergeContext<T, U>,
-  observer: Observer<T | U>
-) {
-  this.observer = observer;
-  this.sourceSub = this.source.subscribe(
-    {
-      next,
-      complete
-    },
-    this
-  );
-  this.otherSub = this.other.subscribe(
-    {
-      next,
-      complete
-    },
-    this
-  );
-
-  return mergeCancel;
-}
-
-function next<T, U>(this: MergeContext<T, U>, value: T | U) {
-  return this.observer ? this.observer.next(value) : Promise.resolve();
-}
-
-function complete<T, U>(this: MergeContext<T, U>) {
-  return this.observer &&
-    ((!this.sourceSub || this.sourceSub.closed) &&
-      (!this.otherSub || this.otherSub.closed))
-    ? this.observer.complete()
-    : Promise.resolve();
-}
-
-function mergeCancel<T, U>(this: MergeContext<T, U>) {
-  if (this.otherSub) {
-    const { otherSub } = this;
-    this.otherSub = null;
-    if (!otherSub.closed) {
-      otherSub.cancel();
-    }
-  }
-  if (this.sourceSub) {
-    const { sourceSub } = this;
-    this.sourceSub = null;
-    if (!sourceSub.closed) {
-      sourceSub.cancel();
-    }
+    return new MergeCancel(subs);
   }
 }
 
-interface MergeArg<T, U> {
-  source: Observable<U>;
-  other: Observable<T>;
+class MergeSourceObserver<T> {
+  get closed() {
+    return this.observer.closed;
+  }
+
+  constructor(
+    private i: number,
+    private completions: Array<(() => any) | null>,
+    private observer: Observer<T>
+  ) {}
+
+  next(value: T) {
+    return this.observer.closed ? Promise.resolve() : this.observer.next(value);
+  }
+
+  complete() {
+    return new Promise(resolve => {
+      this.completions[this.i] = resolve;
+      for (const c of this.completions) {
+        if (!c) {
+          return;
+        }
+      }
+      for (const c of this.completions) {
+        if (c) {
+          c();
+        }
+      }
+    });
+  }
 }
 
-interface MergeContext<T, U> extends MergeArg<T, U> {
-  observer: Observer<T | U> | null;
-  sourceSub: Subscription | null;
-  otherSub: Subscription | null;
+class MergeCancel implements Cancellation {
+  constructor(private subs: Subscription[]) {}
+
+  cancel() {
+    for (const sub of this.subs) {
+      if (!sub.closed) {
+        sub.cancel();
+      }
+    }
+  }
 }

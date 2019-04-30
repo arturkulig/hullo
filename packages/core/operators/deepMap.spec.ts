@@ -4,50 +4,55 @@ import { deepMap } from "./deepMap";
 import { Observable, Subscription } from "../observable";
 
 it("deepMap", async () => {
-  const results: { i: number; v?: number; c?: boolean }[] = [];
+  const results: { i: number; v?: number; evt: string }[] = [];
   const subs: { stream: Observable<number>; sub: Subscription }[] = [];
   of([[0], [0, 1], [1, 1], [10]])
     .pipe(deepMap(_ => _))
     .subscribe({
       next: streams => {
-        results.push({ i: -1 });
+        results.push({ i: -1, evt: "value" });
         streams.forEach((stream, i) => {
           for (const sub of subs) {
             if (sub.stream === stream) {
               return;
             }
           }
-          results.push({ i, c: false });
+          results.push({ i, evt: "track start" });
           subs.push({
             stream,
             sub: stream.subscribe({
               next: v => {
-                results.push({ i, v });
+                results.push({ i, v, evt: "track value" });
               },
               complete: () => {
-                results.push({ i, c: true });
+                results.push({ i, evt: "track done" });
               }
             })
           });
         });
       },
       complete() {
-        results.push({ i: -1, c: true });
+        results.push({ i: -1, evt: "done" });
       }
     });
   await timeout(0);
   expect(results).toEqual([
-    { i: -1 },
-    { i: 0, c: false },
-    { i: 0, v: 0 },
-    { i: -1 },
-    { i: 1, c: false },
-    { i: 1, v: 1 },
-    { i: 0, v: 1 },
-    { i: 1, c: true },
-    { i: -1 },
-    { i: 0, v: 10 },
-    { i: -1, c: true },
-    { i: 0, c: true }
+    // [0]
+    { evt: "value", i: -1 },
+    { evt: "track start", i: 0 },
+    { evt: "track value", i: 0, v: 0 },
+    // [0, 1],
+    { evt: "value", i: -1 },
+    { evt: "track start", i: 1 },
+    { evt: "track value", i: 1, v: 1 },
+    // [1, 1],
+    { evt: "track value", i: 0, v: 1 },
+    // [10]
+    { evt: "value", i: -1 },
+    { evt: "track done", i: 1 },
+    { evt: "track value", i: 0, v: 10 },
+    // EOF
+    { evt: "done", i: -1 },
+    { evt: "track done", i: 0 }
   ]);
 });

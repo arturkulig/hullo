@@ -1,11 +1,11 @@
-import { observable } from "./observable";
+import { Observable } from "./observable";
 import { timeout } from "./timeout";
 import { of } from "./of";
 
 describe("observable", () => {
   it("sends one message", async () => {
     let producerCalled = 0;
-    const o = observable<number>(observer => {
+    const o = new Observable<number>(observer => {
       producerCalled++;
       observer.next(6);
     });
@@ -23,7 +23,7 @@ describe("observable", () => {
   });
 
   it("sends two messages", async () => {
-    const o = observable<number>(observer => {
+    const o = new Observable<number>(observer => {
       observer
         .next(6)
         .then(() => observer.next(7))
@@ -44,7 +44,7 @@ describe("observable", () => {
   });
 
   it("sends three messages", async () => {
-    const o = observable<number>(observer => {
+    const o = new Observable<number>(observer => {
       observer
         .next(6)
         .then(() => observer.next(7))
@@ -66,7 +66,7 @@ describe("observable", () => {
   });
 
   it("cancels", async () => {
-    const o = observable<number>(observer => {
+    const o = new Observable<number>(observer => {
       observer
         .next(6)
         .then(() => timeout(10))
@@ -99,16 +99,14 @@ describe("observable", () => {
     expect(result).toEqual([1, 2, 3, 4]);
   });
 
-  it("observer can be destructured", async () => {
-    const result: number[] = [];
-    observable<number>(({ next }) => {
-      next(5);
-    }).subscribe({
-      next: v => {
-        result.push(v);
-      }
-    });
-    expect(result).toEqual([5]);
+  it("observer can not be destructured", async () => {
+    expect(() => {
+      new Observable<number>(({ next }) => {
+        next(5);
+      }).subscribe({
+        next: _v => {}
+      });
+    }).toThrow();
   });
 });
 

@@ -4,6 +4,10 @@ import { state } from "@hullo/core/operators/state";
 
 export function pageVisibility() {
   return ofEventTarget(window.document, "visibilitychange")
-    .pipe(map(() => document.visibilityState))
-    .pipe(state(document.visibilityState));
+    .pipe(map(isVisible))
+    .pipe(state(isVisible()));
+}
+
+function isVisible() {
+  return document.visibilityState;
 }

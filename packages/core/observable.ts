@@ -1,157 +1,105 @@
-export function observable<T>(produce: Producer<T, void>): Observable<T>;
-export function observable<T, EXE, ARG>(
-  produce: Producer<T, EXE>,
-  getContext: (arg: ARG) => EXE,
-  arg: ARG
-): ContextualObservable<T, EXE, ARG>;
-export function observable<T>(
-  produce: Producer<T, any>,
-  getContext?: (arg: any) => any,
-  arg?: any
-): Observable<T> {
-  const o: ContextualObservable<T, any, any> = {
-    produce,
-    getContext: getContext!,
-    arg: arg!,
-    [observableSymbol]: true,
-    subscribe,
-    pipe
-  };
-  return o;
-}
+export const observableSymbol = Symbol("is observable");
 
-function subscribe<T>(
-  this: ContextualObservable<T, any, any>,
-  observer: Subscriber<T>
-): Subscription;
-function subscribe<T, EXE, ObserverContext = any>(
-  this: ContextualObservable<T, EXE, any>,
-  observer: Subscriber<T, ObserverContext>,
-  observerContext?: ObserverContext
-): Subscription;
-function subscribe<T, EXE, ObserverContext = any>(
-  this: ContextualObservable<T, EXE, any>,
-  observer: Subscriber<T, ObserverContext>,
-  observerContext?: ObserverContext
-): Subscription {
-  const exeContext = this.getContext
-    ? this.getContext(this.arg!)
-    : ((undefined as any) as EXE);
+export class Observable<T> {
+  [observableSymbol] = true;
 
-  const observation: Observation<T, EXE, ObserverContext> = {
-    stage: Stage.active,
-    observer,
-    observerContext: (observerContext || observer) as ObserverContext,
-    exeContext
-  };
-
-  const exe = observableSubscription(observation);
-
-  const cancel = this.produce.call(
-    observation.exeContext,
-    observerForProducer(observation)
-  );
-
-  if (typeof cancel === "function") {
-    observation.cancel = cancel;
+  static isObservable<T>(o: any): o is Observable<T> {
+    return o != null && typeof o === "object" && o[observableSymbol];
   }
 
-  return exe;
-}
+  constructor(private produce: Producer<T>) {}
 
-function pipe<T, U>(
-  this: ContextualObservable<T, any, any>,
-  transducer: (it: Observable<T>) => U
-): U {
-  return transducer(this);
-}
+  subscribe(observer: Subscriber<T>): Subscription {
+    const observation: Observation<T> = {
+      stage: Stage.active,
+      subscriber: observer
+    };
 
-function observableSubscription<T, EXE>(
-  _observation: Observation<T, EXE, any>
-): Subscription {
-  const os: ObservationSubscription<T, EXE> = {
-    _observation,
-    get closed() {
-      return (
-        this._observation.stage === Stage.cancelled ||
-        this._observation.stage === Stage.completed
-      );
-    },
-    cancel: cancelObservableSubscription
-  };
-  return os;
-}
+    const sub = new BaseSubscription(observation);
 
-interface ObservationSubscription<T, EXE> extends Subscription {
-  _observation: Observation<T, EXE, any>;
-}
+    const teardown =
+      typeof this.produce === "function"
+        ? this.produce(new BaseObserver(observation))
+        : this.produce.subscribe(new BaseObserver(observation));
 
-function cancelObservableSubscription<T, EXE>(
-  this: ObservationSubscription<T, EXE>
-) {
-  this._observation.stage = Stage.cancelled;
-  const cancel = this._observation.cancel;
-  const exeContext = this._observation.exeContext;
-  if (cancel) {
-    (this._observation.sending || Promise.resolve()).then(() => {
-      cancel.call(exeContext);
-    });
+    if (isTeardown(teardown)) {
+      observation.teardown = teardown;
+    }
+
+    return sub;
+  }
+
+  pipe<U>(transducer: (it: Observable<T>) => U): U {
+    return transducer(this);
   }
 }
 
-function observerForProducer<T, EXE, OBS>(
-  observation: Observation<T, EXE, OBS>
-): Observer<T> {
-  return {
-    get closed() {
-      return observation.stage !== Stage.active;
-    },
-    next,
-    complete
-  };
+class BaseSubscription<T> implements Subscription {
+  constructor(private observation: Observation<T>) {}
 
-  function next(this: void, value: T): Promise<any> {
-    const { stage, observer, observerContext, sending } = observation;
+  get closed() {
+    const { stage } = this.observation;
+    return stage === Stage.cancelled || stage === Stage.completed;
+  }
 
-    if (stage !== Stage.active || !observer.next) {
+  cancel() {
+    this.observation.stage = Stage.cancelled;
+    const { teardown, sending } = this.observation;
+    if (teardown) {
+      (sending || Promise.resolve()).then(() => {
+        doTeardown(teardown);
+      });
+    }
+  }
+}
+
+class BaseObserver<T> implements Observer<T> {
+  constructor(private observation: Observation<T>) {}
+
+  get closed() {
+    return this.observation.stage !== Stage.active;
+  }
+
+  next(value: T): Promise<any> {
+    const { stage, subscriber, sending } = this.observation;
+
+    if (stage !== Stage.active || !subscriber.next) {
       return Promise.resolve();
     }
-    // debugger;
 
     if (sending) {
       return sending.then(() => {
-        observation.sending = undefined;
-        return next(value);
+        this.observation.sending = undefined;
+        return this.next(value);
       });
     }
 
-    const nextSending = observer.next.call(observerContext, value) || undefined;
+    const nextSending = subscriber.next(value) || undefined;
 
-    observation.sending = nextSending;
+    this.observation.sending = nextSending;
 
     return nextSending || Promise.resolve();
   }
 
-  function complete(this: void): Promise<any> {
-    const { stage, observer, observerContext, sending } = observation;
+  complete(): Promise<any> {
+    const { stage, subscriber, sending } = this.observation;
 
-    if (stage !== Stage.active || !observer.complete) {
+    if (stage !== Stage.active || !subscriber.complete) {
       return Promise.resolve();
     }
-    // debugger;
 
     if (sending) {
       return sending.then(() => {
-        observation.sending = undefined;
-        return complete();
+        this.observation.sending = undefined;
+        return this.complete();
       });
     }
 
-    observation.stage = Stage.completed;
+    this.observation.stage = Stage.completed;
 
-    const nextSending = observer.complete.call(observerContext) || undefined;
+    const nextSending = subscriber.complete() || undefined;
 
-    observation.sending = nextSending;
+    this.observation.sending = nextSending;
 
     return nextSending || Promise.resolve();
   }
@@ -163,55 +111,66 @@ enum Stage {
   cancelled
 }
 
-interface Observation<T, ExecutionContext, ObserverContext> {
+interface Observation<T> {
   stage: Stage;
   sending?: Promise<any>;
 
-  cancel?: Cancellation<ExecutionContext>;
-  exeContext: ExecutionContext;
+  teardown?: Teardown;
 
-  observer: Subscriber<T, ObserverContext>;
-  observerContext: ObserverContext;
+  subscriber: Subscriber<T>;
 }
 
-export const observableSymbol = Symbol("is observable");
-
-interface Cancellation<ExecutionContext> {
-  (this: ExecutionContext): void;
-}
 export interface Subscription {
   readonly closed: boolean;
   cancel(): void;
 }
-export interface Observer<T, ObserverContext = any> {
+export interface Observer<T> {
   readonly closed: boolean;
-  next(this: ObserverContext, value: T): Promise<any>;
-  complete(this: ObserverContext): Promise<any>;
+  next(value: T): Promise<any>;
+  complete(): Promise<any>;
 }
 
-export interface Subscriber<T, ObserverContext = any> {
-  next?: (this: ObserverContext, value: T) => void | Promise<any>;
-  complete?: (this: ObserverContext) => void | Promise<any>;
+export interface Subscriber<T> {
+  next?: (value: T) => void | Promise<any>;
+  complete?: () => void | Promise<any>;
 }
 
-export interface Observable<T> {
-  [observableSymbol]: boolean;
-  subscribe<SubscriberContext = any>(
-    observer: Subscriber<T, SubscriberContext>,
-    observerContext?: SubscriberContext
-  ): Subscription;
-  pipe<U>(transducer: (it: Observable<T>) => U): U;
+export type Producer<T> =
+  | ((
+      this: Observable<T>,
+      observer: Observer<T>
+    ) => Teardown | Promise<any> | void)
+  | ComplexProducer<T>;
+
+export interface ComplexProducer<T> {
+  subscribe(observer: Observer<T>): Teardown | void;
 }
 
-export interface Producer<T, ExecutionContext = any> {
-  (this: ExecutionContext, observer: Observer<T>):
-    | void
-    | Cancellation<ExecutionContext>
-    | Promise<any>;
+function doTeardown(t: Teardown) {
+  if (t && typeof t === "function") {
+    t();
+    return;
+  }
+  if (
+    t &&
+    typeof t === "object" &&
+    "cancel" in t &&
+    typeof t.cancel === "function"
+  ) {
+    t.cancel();
+    return;
+  }
 }
 
-interface ContextualObservable<T, EXE, ARG> extends Observable<T> {
-  produce: Producer<T, EXE>;
-  getContext: (arg: ARG) => EXE;
-  arg: ARG;
+function isTeardown(t: any): t is Teardown {
+  return (
+    t != null &&
+    (typeof t === "function" || (typeof t === "object" && "cancel" in t))
+  );
+}
+
+type Teardown = Cancellation | (() => any);
+
+export interface Cancellation {
+  cancel(): void;
 }

@@ -9,14 +9,14 @@ import { of } from "@hullo/core/of";
 import { ofWritableStream } from "./ofWritableStream";
 
 export function createRequestListener(
-  hulloRequestListener: HTTPRequestListener
+  userRequestListener: HTTPRequestListener
 ): RequestListener {
   return async function requestListener(req, res) {
     if (!req.url || !req.method) {
       return;
     }
 
-    const response = await hulloRequestListener({
+    const response = await userRequestListener({
       url: req.url,
       method: req.method,
       headers: req.headers,

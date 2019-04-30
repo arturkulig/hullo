@@ -1,23 +1,20 @@
-import { observable, Observable, Observer } from "@hullo/core/observable";
+import {
+  Observable,
+  Observer,
+  ComplexProducer,
+  Cancellation
+} from "@hullo/core/observable";
 import { Writable } from "stream";
 
-export function ofReadableStream(
-  stream: NodeJS.ReadableStream
-): Observable<ArrayBuffer | string> {
-  return observable<
-    ArrayBuffer | string,
-    OfReadableStreamContext,
-    OfReadableStreamArg
-  >(ofReadableStreamProducer, ofReadableStreamContext, stream);
+export function ofReadableStream(stream: NodeJS.ReadableStream) {
+  return new Observable(new ReadableStreamProducer(stream));
 }
 
-function ofReadableStreamProducer(
-  this: OfReadableStreamContext,
-  observer: Observer<ArrayBuffer | string>
-) {
-  const { stream } = this;
-  stream.pipe(
-    new Writable({
+class ReadableStreamProducer implements ComplexProducer<ArrayBuffer | string> {
+  constructor(private stream: NodeJS.ReadableStream) {}
+
+  subscribe(observer: Observer<ArrayBuffer | string>) {
+    const sink = new Writable({
       write(data: unknown, _encoding, cb) {
         if (!observer.closed) {
           observer.next(normalize(data)).then(() => {
@@ -28,8 +25,22 @@ function ofReadableStreamProducer(
       final() {
         observer.complete();
       }
-    })
-  );
+    });
+    this.stream.pipe(sink);
+
+    return new ReadableStreamCancel(this.stream, sink);
+  }
+}
+
+class ReadableStreamCancel implements Cancellation {
+  constructor(
+    private stream: NodeJS.ReadableStream,
+    private sink: NodeJS.WritableStream
+  ) {}
+
+  cancel() {
+    this.stream.unpipe(this.sink);
+  }
 }
 
 function normalize(data: unknown) {
@@ -47,17 +58,3 @@ function normalize(data: unknown) {
   }
   throw new Error();
 }
-
-function ofReadableStreamContext(
-  arg: OfReadableStreamArg
-): OfReadableStreamContext {
-  return {
-    stream: arg
-  };
-}
-
-interface OfReadableStreamContext {
-  stream: NodeJS.ReadableStream;
-}
-
-interface OfReadableStreamArg extends NodeJS.ReadableStream {}

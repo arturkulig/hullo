@@ -1,12 +1,12 @@
-import { Duplex, duplex } from "@hullo/core/duplex";
-import { channel } from "@hullo/core/channel";
+import { Duplex } from "@hullo/core/duplex";
+import { Channel } from "@hullo/core/channel";
 
 export function ofWebSocket(
   ws: WebSocket
 ): Duplex<ArrayBuffer | string, ArrayBuffer | string> {
   ws.binaryType = "arraybuffer";
 
-  const ch = channel<ArrayBuffer | string>();
+  const ch = new Channel<ArrayBuffer | string>();
 
   let connected = false;
   let closed = false;
@@ -44,7 +44,7 @@ export function ofWebSocket(
     });
   });
 
-  return duplex<ArrayBuffer | string, ArrayBuffer | string>(ch, {
+  return new Duplex<ArrayBuffer | string, ArrayBuffer | string>(ch, {
     get closed() {
       return closed;
     },
@@ -78,10 +78,4 @@ export function ofWebSocket(
       }
     }
   });
-}
-
-let utf8: TextEncoder;
-
-function getUTF8TextEncoder() {
-  return utf8 || (utf8 = new TextEncoder());
 }
