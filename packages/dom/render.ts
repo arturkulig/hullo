@@ -1,10 +1,5 @@
 import { DOMElement, SyncMode } from "./element";
-import {
-  Observer,
-  Observable,
-  Subscriber,
-  Subscription
-} from "@hullo/core/observable";
+import { Observer, Observable, Subscription } from "@hullo/core/observable";
 
 interface Possesion {
   clean(element: HTMLElement, abandonment: boolean): void;
