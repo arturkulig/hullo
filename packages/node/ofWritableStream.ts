@@ -14,24 +14,30 @@ class WritableStreamObserver implements Observer<ArrayBuffer | string> {
   constructor(private stream: NodeJS.WritableStream) {}
 
   next(value: ArrayBuffer | string) {
-    if (this.stream.writable) {
-      return Promise.resolve();
+    if (!this.stream.writable) {
+      return new Promise((resolve, reject) => {
+        this.stream.once("drain", () => {
+          this.push(value).then(resolve, reject);
+        });
+      });
+    } else {
+      return this.push(value);
     }
-    return new Promise(r => {
-      if (typeof value === "string") {
-        this.stream.write(new Buffer(value, "utf-8"), r);
-      } else {
-        this.stream.write(new Buffer(value), r);
-      }
-    });
   }
 
   complete() {
-    if (this.stream.writable) {
-      return Promise.resolve();
-    }
     return new Promise(r => {
       this.stream.end(r);
+    });
+  }
+
+  push(value: ArrayBuffer | string) {
+    return new Promise(r => {
+      if (typeof value === "string") {
+        this.stream.write(value, "utf-8", () => r());
+      } else {
+        this.stream.write(Buffer.from(value), () => r());
+      }
     });
   }
 }

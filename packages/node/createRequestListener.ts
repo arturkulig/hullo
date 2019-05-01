@@ -23,8 +23,8 @@ export function createRequestListener(
       raw: !!({ POST: true, PUT: true } as { [id: string]: boolean })[
         req.method
       ]
-        ? (ofReadableStream(req) as Observable<Buffer>)
-        : of<Buffer>([])
+        ? ofReadableStream(req)
+        : of<ArrayBuffer | string>([])
     });
 
     res.writeHead(response.status, response.headers);
@@ -44,11 +44,11 @@ interface HTTPRequest {
   headers: IncomingHttpHeaders;
   method: string;
   url: string;
-  raw: Observable<Buffer>;
+  raw: Observable<ArrayBuffer | string>;
 }
 
 interface HTTPResponse {
   status: number;
-  body?: Observable<string | Buffer | Uint8Array>;
+  body?: Observable<ArrayBuffer | string>;
   headers: OutgoingHttpHeaders;
 }
