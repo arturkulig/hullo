@@ -67,7 +67,7 @@ class DeepMapSourceObserver<T, U> implements Observer<T[]> {
       needsToPushOutput = true;
       const detail$ = new Atom<T>(list[i]);
       context.detail$s.push(detail$);
-      context.output.push(context.xf(detail$));
+      context.output.push(context.xf(detail$, i));
       const delivery = detail$.next(list[i]);
       deliveries.push(delivery);
     }
@@ -106,7 +106,7 @@ class DeepMapSourceObserver<T, U> implements Observer<T[]> {
 }
 
 interface DeepMapTransform<T, U> {
-  (value: Observable<T>): U;
+  (value: Observable<T>, i: number): U;
 }
 
 interface DeepMapContext<T, U> {

@@ -89,8 +89,9 @@ class DeepMapByKeySourceObserver<T, U> implements Observer<T[]> {
       } else {
         itemsCreated++;
         const detail$ = new Atom<T>(list[i]);
-        const newOutputEntry = context.xf(detail$);
-        nextKeys[i] = context.identity(list[i]);
+        const key = context.identity(list[i]);
+        const newOutputEntry = context.xf(detail$, key);
+        nextKeys[i] = key;
         nextDetail$s[i] = detail$;
         nextOutput[i] = newOutputEntry;
         const delivery = detail$.next(list[i]);
@@ -139,7 +140,7 @@ class DeepMapByKeySourceObserver<T, U> implements Observer<T[]> {
 }
 
 interface DeepMapByKeyTransform<T, U> {
-  (value: Observable<T>): U;
+  (value: Observable<T>, key: string): U;
 }
 
 interface DeepMapByKeyIndentity<T> {

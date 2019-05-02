@@ -49,8 +49,8 @@ it("deepMap", async () => {
     { evt: "track value", i: 0, v: 1 },
     // [10]
     { evt: "value", i: -1 },
-    { evt: "track done", i: 1 },
     { evt: "track value", i: 0, v: 10 },
+    { evt: "track done", i: 1 },
     // EOF
     { evt: "done", i: -1 },
     { evt: "track done", i: 0 }
