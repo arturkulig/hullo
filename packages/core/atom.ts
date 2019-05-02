@@ -5,30 +5,28 @@ import {
   ComplexProducer,
   Cancellation
 } from "./observable";
-import { state, State } from "./operators/state";
 
 export class Atom<T> extends Duplex<T, T> {
-  private state: State<T>;
+  private context: AtomWideContext<T>;
 
-  constructor(init: T) {
+  constructor(state: T) {
     const context: AtomWideContext<T> = {
       closed: false,
-      remote: undefined
+      remote: undefined,
+      state: { ref: state }
     };
-    const out = new Observable<T>(new AtomProducer<T>(context)).pipe(
-      state(init)
-    );
+    const out = new Observable<T>(new AtomProducer<T>(context));
     const ins = new AtomObserver(context);
     super(out, ins);
-    this.state = out;
+    this.context = context;
   }
 
   valueOf(): T {
-    return this.state.valueOf();
+    return this.context.state.ref;
   }
 
   unwrap(): T {
-    return this.state.unwrap();
+    return this.context.state.ref;
   }
 }
 
@@ -40,6 +38,12 @@ class AtomProducer<T> implements ComplexProducer<T> {
       observer.complete();
     } else {
       this.context.remote = observer;
+      const { state } = this.context;
+      Promise.resolve().then(() => {
+        if (this.context.state === state) {
+          observer.next(this.context.state.ref);
+        }
+      });
       return new AtomCancel(this.context);
     }
   }
@@ -60,12 +64,13 @@ class AtomObserver<T> implements Observer<T> {
 
   constructor(private context: AtomWideContext<T>) {}
 
-  next(value: T) {
+  next(ref: T) {
     if (this.closed) {
       return Promise.resolve();
     }
+    this.context.state = { ref };
     return this.context.remote
-      ? this.context.remote.next(value)
+      ? this.context.remote.next(ref)
       : Promise.resolve();
   }
 
@@ -83,4 +88,5 @@ class AtomObserver<T> implements Observer<T> {
 interface AtomWideContext<T> {
   closed: boolean;
   remote: Observer<T> | undefined;
+  state: { ref: T };
 }
