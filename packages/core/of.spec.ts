@@ -18,6 +18,23 @@ describe("of", () => {
     of([1, 2, 3]).subscribe({
       next: v => {
         result.push(v);
+      },
+      complete: () => {
+        result.push(-1);
+      }
+    });
+    await timeout(0);
+    expect(result).toEqual([1, 2, 3, -1]);
+  });
+
+  it("autoclosed disabled", async () => {
+    const result: number[] = [];
+    of([1, 2, 3], false).subscribe({
+      next: v => {
+        result.push(v);
+      },
+      complete: () => {
+        result.push(-1);
       }
     });
     await timeout(0);

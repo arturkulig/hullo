@@ -6,18 +6,19 @@ import {
 } from "./observable";
 
 export function of<T>(
-  source: AsyncIterable<T> | Iterable<T> | T
+  source: AsyncIterable<T> | Iterable<T> | T,
+  autoclose = true
 ): Observable<T> {
   if (typeof source === "object" && Symbol.asyncIterator in source) {
     const asyncSource = source as AsyncIterable<T>;
-    return new Observable<T>(new AsyncSourceProducer(asyncSource));
+    return new Observable<T>(new AsyncSourceProducer(asyncSource, autoclose));
   }
   if (typeof source === "object" && Symbol.iterator in source) {
     const syncSource = source as Iterable<T>;
-    return new Observable<T>(new SyncSourceProducer(syncSource));
+    return new Observable<T>(new SyncSourceProducer(syncSource, autoclose));
   }
   const unitSource = source as T;
-  return new Observable<T>(new UnitProducer(unitSource));
+  return new Observable<T>(new UnitProducer(unitSource, autoclose));
 }
 
 // ::of async iterable
@@ -29,10 +30,11 @@ interface AsyncSourceContext<T> {
   retrieving: boolean;
   drained: boolean;
   cancelled: boolean;
+  autoclose: boolean;
 }
 
 class AsyncSourceProducer<T> implements ComplexProducer<T> {
-  constructor(private source: AsyncIterable<T>) {}
+  constructor(private source: AsyncIterable<T>, private autoclose: boolean) {}
 
   subscribe(observer: Observer<T>) {
     const context: AsyncSourceContext<T> = {
@@ -41,7 +43,8 @@ class AsyncSourceProducer<T> implements ComplexProducer<T> {
       asyncIterator: this.source[Symbol.asyncIterator](),
       retrieving: false,
       drained: false,
-      cancelled: false
+      cancelled: false,
+      autoclose: this.autoclose
     };
 
     asyncSourceIterate(context);
@@ -85,7 +88,9 @@ function resultHandler<T>(
   }
   if (iteration.done) {
     context.drained = true;
-    context.observer.complete().then(() => asyncSourceIterate(context));
+    if (context.autoclose) {
+      context.observer.complete();
+    }
   } else {
     context.observer
       .next(iteration.value)
@@ -116,17 +121,19 @@ interface SyncSourceContext<T> {
   iterator?: Iterator<T>;
   drained: boolean;
   cancelled: boolean;
+  autoclose: boolean;
 }
 
 class SyncSourceProducer<T> implements ComplexProducer<T> {
-  constructor(private source: Iterable<T>) {}
+  constructor(private source: Iterable<T>, private autoclose: boolean) {}
 
   subscribe(observer: Observer<T>) {
     const context: SyncSourceContext<T> = {
       observer,
       iterable: this.source,
       drained: false,
-      cancelled: false
+      cancelled: false,
+      autoclose: this.autoclose
     };
 
     syncSourceIterate(context);
@@ -136,10 +143,6 @@ class SyncSourceProducer<T> implements ComplexProducer<T> {
 }
 
 function syncSourceIterate<T>(context: SyncSourceContext<T>) {
-  if (!context.observer) {
-    return;
-  }
-
   if (context.drained || context.cancelled) {
     return;
   }
@@ -150,7 +153,9 @@ function syncSourceIterate<T>(context: SyncSourceContext<T>) {
 
   if (iteration.done) {
     context.drained = true;
-    context.observer.complete().then(() => syncSourceIterate(context));
+    if (context.autoclose) {
+      context.observer.complete();
+    }
   } else {
     context.observer
       .next(iteration.value)
@@ -171,14 +176,16 @@ class SyncSourceCancel<T> implements Cancellation {
 // ::of single value
 
 class UnitProducer<T> implements ComplexProducer<T> {
-  constructor(private value: T) {}
+  constructor(private value: T, private autoclose: boolean) {}
 
   subscribe(observer: Observer<T>) {
     observer.next(this.value).then(() => {
       if (observer.closed) {
         return;
       }
-      observer.complete();
+      if (this.autoclose) {
+        observer.complete();
+      }
     });
   }
 }
