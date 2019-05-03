@@ -140,7 +140,7 @@ class DeepMapByKeySourceObserver<T, U> implements Observer<T[]> {
 }
 
 interface DeepMapByKeyTransform<T, U> {
-  (value: Observable<T>, key: string): U;
+  (value: Atom<T>, key: string): U;
 }
 
 interface DeepMapByKeyIndentity<T> {

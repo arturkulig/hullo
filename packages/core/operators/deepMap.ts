@@ -106,7 +106,7 @@ class DeepMapSourceObserver<T, U> implements Observer<T[]> {
 }
 
 interface DeepMapTransform<T, U> {
-  (value: Observable<T>, i: number): U;
+  (value: Atom<T>, i: number): U;
 }
 
 interface DeepMapContext<T, U> {
