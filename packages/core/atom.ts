@@ -12,7 +12,7 @@ export class Atom<T> extends Duplex<T, T> {
   constructor(state: T) {
     const context: AtomWideContext<T> = {
       closed: false,
-      remote: undefined,
+      remotes: [],
       state: { ref: state }
     };
     const out = new Observable<T>(new AtomProducer<T>(context));
@@ -37,23 +37,26 @@ class AtomProducer<T> implements ComplexProducer<T> {
     if (this.context.closed) {
       observer.complete();
     } else {
-      this.context.remote = observer;
+      this.context.remotes.push(observer);
       const { state } = this.context;
       Promise.resolve().then(() => {
         if (this.context.state === state) {
           observer.next(this.context.state.ref);
         }
       });
-      return new AtomCancel(this.context);
+      return new AtomCancel(this.context, observer);
     }
   }
 }
 
 class AtomCancel<T> implements Cancellation {
-  constructor(private context: AtomWideContext<T>) {}
+  constructor(
+    private context: AtomWideContext<T>,
+    private observer: Observer<T>
+  ) {}
 
   cancel() {
-    this.context.remote = undefined;
+    this.context.remotes.splice(this.context.remotes.indexOf(this.observer), 1);
   }
 }
 
@@ -69,8 +72,8 @@ class AtomObserver<T> implements Observer<T> {
       return Promise.resolve();
     }
     this.context.state = { ref };
-    return this.context.remote
-      ? this.context.remote.next(ref)
+    return this.context.remotes.length
+      ? Promise.all(this.context.remotes.map(remote => remote.next(ref)))
       : Promise.resolve();
   }
 
@@ -79,14 +82,14 @@ class AtomObserver<T> implements Observer<T> {
       return Promise.resolve();
     }
     this.context.closed = true;
-    return this.context.remote
-      ? this.context.remote.complete()
+    return this.context.remotes.length
+      ? Promise.all(this.context.remotes.map(remote => remote.complete()))
       : Promise.resolve();
   }
 }
 
 interface AtomWideContext<T> {
   closed: boolean;
-  remote: Observer<T> | undefined;
+  remotes: Observer<T>[];
   state: { ref: T };
 }
