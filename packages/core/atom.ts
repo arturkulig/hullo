@@ -19,6 +19,7 @@ export class Atom<T> extends Duplex<T, T> {
     const ins = new AtomObserver(context);
     super(out, ins);
     this.context = context;
+    this.lastUpdate = Promise.resolve();
   }
 
   valueOf(): T {
@@ -27,6 +28,15 @@ export class Atom<T> extends Duplex<T, T> {
 
   unwrap(): T {
     return this.context.state.ref;
+  }
+
+  private lastUpdate: Promise<any>;
+  update(xf: (current: T) => Promise<T> | T) {
+    return (this.lastUpdate = this.lastUpdate
+      .then(() => xf(this.context.state.ref))
+      .then(result => {
+        return this.next(result);
+      }));
   }
 }
 
@@ -68,7 +78,7 @@ class AtomObserver<T> implements Observer<T> {
   constructor(private context: AtomWideContext<T>) {}
 
   next(ref: T) {
-    if (this.closed) {
+    if (this.context.closed) {
       return Promise.resolve();
     }
     this.context.state = { ref };

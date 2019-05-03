@@ -31,4 +31,26 @@ describe("Atom", () => {
     await a.next(1);
     expect(a.unwrap()).toEqual(1);
   });
+
+  it("queues long updates correctly", async () => {
+    const result: number[] = [];
+    const a = new Atom(0);
+    a.subscribe({
+      next: n => {
+        result.push(n);
+      }
+    });
+    await Promise.all([
+      a.update(i => i + 1),
+      a.update(async i => {
+        await timeout(100);
+        return i + 10;
+      }),
+      a.update(async i => {
+        await timeout(0);
+        return i + 100;
+      })
+    ]);
+    expect(result).toEqual([0, 1, 11, 111]);
+  });
 });
