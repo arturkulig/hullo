@@ -1,14 +1,14 @@
 {
   "name": "@hullo/packagename",
   "private": true,
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "",
   "main": "index.js",
   "scripts": {},
   "author": "Artur Kulig",
   "license": "ISC",
   "dependencies": {
-    "@hullo/core": "^0.6.2"
+    "@hullo/core": "^0.7.0"
   },
   "devDependencies": {
     "typescript": "^3.4.3"
