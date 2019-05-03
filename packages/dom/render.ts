@@ -5,6 +5,10 @@ interface Possesion {
   clean(element: HTMLElement, abandonment: boolean): void;
 }
 
+const NO_POSSESSION: Possesion = {
+  clean() {}
+};
+
 export function render(shape: DOMElement) {
   const e = document.createElement(shape.tagName);
   return { element: e, possesion: mold(e, shape) };
@@ -98,8 +102,8 @@ class DerefPossesion implements Possesion {
 type In<T, N extends keyof T> = T[N];
 
 type ChildrenRegistry = {
-  shapes: DOMElement[];
-  elements: HTMLElement[];
+  shapes: (DOMElement | string)[];
+  elements: Node[];
   possesions: Possesion[];
 };
 
@@ -127,7 +131,7 @@ function render_children(
 function render_children_each(
   htmlElement: HTMLElement,
   syncOptions: SyncMode,
-  nextShapes: Array<DOMElement>,
+  nextShapes: Array<DOMElement | string>,
   children: ChildrenRegistry
 ) {
   const { shapes, elements, possesions } = children;
@@ -164,14 +168,31 @@ function render_children_each(
 
     //element remains
     else if (i < shapes.length && i < nextShapes.length) {
-      const abandon = currentShape.tagName !== nextShape.tagName;
-      currentPossesion.clean(currentElement, abandon);
-      const { element, possesion } = abandon
-        ? render_internal(nextShape, syncOptions)
-        : {
-            element: currentElement,
-            possesion: mold(currentElement, nextShape, syncOptions)
-          };
+      const abandon =
+        typeof currentShape === "string" ||
+        typeof nextShape === "string" ||
+        currentShape.tagName !== nextShape.tagName;
+
+      if (typeof currentShape === "object") {
+        currentPossesion.clean(currentElement as HTMLElement, abandon);
+      }
+
+      const { element, possesion } =
+        typeof nextShape === "string"
+          ? {
+              element: document.createTextNode(nextShape),
+              possesion: NO_POSSESSION
+            }
+          : abandon
+          ? render_internal(nextShape, syncOptions)
+          : {
+              element: currentElement,
+              possesion: mold(
+                currentElement as HTMLElement,
+                nextShape,
+                syncOptions
+              )
+            };
 
       nextElements.push(element);
       nextPossesions.push(possesion);
@@ -179,9 +200,14 @@ function render_children_each(
 
     // element adding
     else if (i < nextShapes.length) {
-      const { element, possesion } = render_internal(nextShape, syncOptions);
-      nextElements.push(element);
-      nextPossesions.push(possesion);
+      if (typeof nextShape === "string") {
+        nextElements.push(document.createTextNode(nextShape));
+        nextPossesions.push(NO_POSSESSION);
+      } else {
+        const { element, possesion } = render_internal(nextShape, syncOptions);
+        nextElements.push(element);
+        nextPossesions.push(possesion);
+      }
     }
   }
 

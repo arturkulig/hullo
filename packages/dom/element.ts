@@ -1,6 +1,8 @@
 import { Observable, Observer } from "@hullo/core/observable";
 
-export type DOMChildren = DOMElement[] | Observable<DOMElement[]>;
+export type DOMChildren =
+  | (DOMElement | string)[]
+  | Observable<(DOMElement | string)[]>;
 
 export type SyncMode = "immediate" | "self" | "branch";
 
