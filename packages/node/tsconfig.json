@@ -20,6 +20,6 @@
     "pretty": true,
     "strict": true
   },
-  "include": ["index.ts"],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules"]
 }

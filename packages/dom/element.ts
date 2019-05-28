@@ -25,7 +25,7 @@ export interface DOMElement extends DOMElementDesc {
   tagName: string;
 }
 
-const emptyProps: {} = {};
+const emptyObject: {} = {};
 const emptyChildren: [] = [];
 
 export function element(
@@ -35,12 +35,12 @@ export function element(
 ): DOMElement {
   return {
     tagName,
-    attrs: emptyProps,
-    props: emptyProps,
-    style: emptyProps,
-    events: emptyProps,
+    attrs: emptyObject,
+    props: emptyObject,
+    style: emptyObject,
+    events: emptyObject,
     children: emptyChildren,
     ...desc,
-    ...(children2 ? { children: children2 } : emptyProps)
+    ...(children2 ? { children: children2 } : emptyObject)
   };
 }

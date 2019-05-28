@@ -7,9 +7,15 @@
   "author": "Artur Kulig",
   "license": "ISC",
   "dependencies": {
+    "@hullo/browser": "^0.7.0",
     "@hullo/core": "^0.7.0"
   },
   "devDependencies": {
+    "@types/jest": "^24.0.13",
+    "jest": "^24.8.0",
+    "jest-dom": "^3.4.0",
+    "jest-environment-jsdom-fifteen": "^1.0.0",
+    "ts-jest": "^24.0.2",
     "typescript": "^3.4.3"
   }
 }

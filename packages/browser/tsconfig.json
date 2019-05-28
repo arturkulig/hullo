@@ -5,7 +5,7 @@
     "declaration": true,
     "target": "esnext",
     "lib": ["esnext", "esnext.asynciterable", "dom"],
-    "types": ["jest"],
+    "types": ["jest", "node"],
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
     "alwaysStrict": true,
@@ -20,6 +20,6 @@
     "pretty": true,
     "strict": true
   },
-  "include": ["index.ts"],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules"]
 }

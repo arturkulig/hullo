@@ -1,9 +1,4 @@
-import { element, DOMElementDesc, DOMChildren } from "./element";
-
-function bindToTag(tagName: string) {
-  return (desc: Partial<DOMElementDesc>, children?: DOMChildren) =>
-    element(tagName, desc, children);
-}
+import { bindToTag } from "./internals/bindToTag";
 
 export namespace svg {
   export const a = bindToTag("a");
