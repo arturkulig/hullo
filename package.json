@@ -6,11 +6,11 @@
   "scripts": {
     "index": "ts-node index_folders.ts",
     "clear": "ts-node clean_up.ts",
-    "prepare": "concurrently \"npm run clear\" \"npm run index\"",
-    "test": "npm run prepare && lerna exec jest",
-    "build": "npm run prepare && tsc",
+    "index-n-clear": "concurrently \"npm run clear\" \"npm run index\"",
+    "test": "npm run index-n-clear && lerna exec jest",
+    "build": "npm run index-n-clear && tsc",
     "prepublish": "npm run build",
-    "dev": "npm run prepare && lerna exec --parallel \"jest --watch\"",
+    "dev": "npm run index-n-clear && lerna exec --parallel \"jest --watch\"",
     "create-package": "ts-node create_package.ts"
   },
   "keywords": [],
