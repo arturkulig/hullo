@@ -5,17 +5,16 @@ import {
   Subscription
 } from "@hullo/core/Observable";
 
-interface RAFController {
-  requestAnimationFrame: Window["requestAnimationFrame"];
-  cancelAnimationFrame: Window["cancelAnimationFrame"];
-}
-
-export function ofFrames(wnd: RAFController = window) {
+export function ofFrames(
+  wnd: Pick<Window, "requestAnimationFrame" | "cancelAnimationFrame"> = window
+) {
   return new Observable(new RAFProducer(wnd));
 }
 
 class RAFProducer implements ComplexProducer<number> {
-  constructor(private wnd: RAFController = window) {}
+  constructor(
+    private wnd: Pick<Window, "requestAnimationFrame" | "cancelAnimationFrame">
+  ) {}
 
   subscribe(subscriber: Observer<number>) {
     return new RAFSubscription(this.wnd, subscriber);
@@ -27,7 +26,10 @@ class RAFSubscription implements Subscription {
   closed = false;
 
   constructor(
-    private wnd: RAFController = window,
+    private wnd: Pick<
+      Window,
+      "requestAnimationFrame" | "cancelAnimationFrame"
+    > = window,
     private subscriber: Observer<number>
   ) {
     this.post();
