@@ -120,9 +120,8 @@ interface Observation<T> {
   subscriber: Subscriber<T>;
 }
 
-export interface Subscription {
+export interface Subscription extends Cancellation {
   readonly closed: boolean;
-  cancel(): void;
 }
 export interface Observer<T> {
   readonly closed: boolean;
