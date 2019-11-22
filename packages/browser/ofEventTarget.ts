@@ -12,9 +12,11 @@ export function ofEventTarget<VALUE_EVENT_META = void>(
   valueName: string,
   completionName?: string
 ) {
+  const safeEmitter = modernizeEventTargetIfNecessary(emitter);
+
   return new Duplex<VALUE_EVENT_META, Event & VALUE_EVENT_META>(
     new Observable<Event & VALUE_EVENT_META>(
-      new EventsProducer(emitter, valueName, completionName)
+      new EventsProducer(safeEmitter, valueName, completionName)
     ).pipe(subject),
     {
       get closed() {
@@ -22,7 +24,7 @@ export function ofEventTarget<VALUE_EVENT_META = void>(
       },
 
       next(meta: VALUE_EVENT_META) {
-        emitter.dispatchEvent(
+        safeEmitter.dispatchEvent(
           meta == null
             ? new Event(valueName)
             : Object.assign(new Event(valueName), meta)
@@ -66,6 +68,37 @@ class EventsProducer<VALUE_EVENT_META>
       complete
     );
   }
+}
+
+interface LegacyEventTarget {
+  addListener(...args: any): void;
+  dispatchEvent(...args: any): boolean;
+  removeListener(...args: any): void;
+}
+
+function modernizeEventTargetIfNecessary(
+  emitter: EventTarget | LegacyEventTarget
+): EventTarget {
+  if (isModernEventTarget(emitter)) {
+    return emitter;
+  }
+  return {
+    addEventListener(...args) {
+      emitter.addListener(...args);
+    },
+    dispatchEvent(...args) {
+      return emitter.dispatchEvent(...args);
+    },
+    removeEventListener(...args) {
+      emitter.removeListener(...args);
+    }
+  };
+}
+
+function isModernEventTarget(
+  emitter: EventTarget | LegacyEventTarget
+): emitter is EventTarget {
+  return "addEventListener" in emitter;
 }
 
 class EventsCancel implements Cancellation {
