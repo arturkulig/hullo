@@ -1,0 +1,22 @@
+{
+  "name": "@hullo/webserver",
+  "private": true,
+  "version": "0.8.3",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "author": "Artur Kulig",
+  "license": "ISC",
+  "dependencies": {
+    "@hullo/core": "^0.8.3",
+    "@types/cookie": "^0.3.3",
+    "cookie": "^0.4.0",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v16.4.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^24.0.13",
+    "jest": "^24.8.0",
+    "ts-jest": "^24.0.2",
+    "typescript": "^3.4.3"
+  }
+}
