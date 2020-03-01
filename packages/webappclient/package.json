@@ -1,5 +1,5 @@
 {
-  "name": "@hullo/webapp",
+  "name": "@hullo/webappclient",
   "private": false,
   "version": "0.8.3",
   "description": "",
@@ -9,12 +9,11 @@
   "license": "ISC",
   "dependencies": {
     "@hullo/core": "^0.8.3",
+    "@hullo/webapp": "^0.8.3",
+    "@hullo/browser": "^0.8.3",
+    "@hullo/node": "^0.8.3",
     "@hullo/validate": "^0.8.3",
-    "@hullo/messagepack": "^0.8.3",
-    "cookie": "^0.4.0",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v17.2.0"
+    "@hullo/messagepack": "^0.8.3"
   },
-  "devDependencies": {
-    "@types/cookie": "^0.3.3"
-  }
+  "devDependencies": {}
 }

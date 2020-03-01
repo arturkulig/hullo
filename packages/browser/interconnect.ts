@@ -1,92 +1,183 @@
 import { ofMessagePort, MessagePortDuplex } from "./ofMessagePort";
+import { Duplex } from "@hullo/core/Duplex";
+import { Channel } from "@hullo/core/Channel";
+import { isString, isObject, isAny } from "@hullo/validate";
 
-type Context = { window: Window } | { worker: Worker };
+export interface InterconnectedMessage {
+  context: string;
+  content: unknown;
+}
 
-export function interconnect<
-  CHS extends { [id: string]: { in: any; out: any } } = {
-    [id: string]: { in: any; out: any };
-  }
->(self: Window | Worker, contexts?: { [id: string]: Context }) {
-  const othersInt: {
-    [id in keyof CHS]?: MessagePortDuplex<CHS[id]["in"], CHS[id]["out"]>
+/**
+interface InternalMessage {
+  type: "message";
+  context: string;
+  content: unknown;
+}
+
+interface InternalAnnouncement {
+  type: "announce";
+  context: string;
+  port: MessagePort;
+}
+
+interface InternalAcknowledgement {
+  type: "ack";
+  context: string;
+}
+*/
+
+const isEventWithType = isObject({ data: isObject({ type: isString }) });
+const isMessage = isObject({
+  type: isString,
+  context: isString,
+  content: isAny
+});
+const isAck = isObject({ type: isString, context: isString });
+const isAnnouncement = isObject({
+  type: isString,
+  context: isString,
+  port: isAny
+});
+
+export function interconnect(
+  name: string,
+  hubIn: MessagePort,
+  hubOut: MessagePort
+): Duplex<InterconnectedMessage, InterconnectedMessage> {
+  const mch = new MessageChannel();
+  const ins = new Channel<InterconnectedMessage>();
+  const closed = { value: false };
+  const outsChannels: { [id: string]: MessagePortDuplex } = {};
+  const outsStatus: {
+    [id: string]: {
+      queue: Array<{ content: unknown; ack: () => unknown }>;
+      locks: number;
+    };
   } = {};
-  const othersOrders: {
-    [id in keyof CHS]?: Array<
-      (mpd: MessagePortDuplex<CHS[id]["in"], CHS[id]["out"]>) => any
-    >
-  } = {};
 
-  self.addEventListener("message", event => {
-    if ("data" in event) {
-      const { data } = event as { data: any };
-      if (data && typeof data === "object" && "type" in data) {
-        switch (data.type) {
-          case "bridge:create":
-            const { to, port } = data as { to: string; port: MessagePort };
-            const messagePortDuplex = ofMessagePort(port);
-            othersInt[to] = messagePortDuplex;
-            const orders = othersOrders[to];
-            if (orders) {
-              for (const receive of orders) {
-                receive(messagePortDuplex);
-              }
+  const selfOutSub = ofMessagePort(mch.port2).subscribe({
+    next: async event => {
+      if (!isEventWithType(event)) {
+        return;
+      }
+      const { data } = event;
+      switch (data.type) {
+        case "message": {
+          if (isMessage(data)) {
+            const { context, content } = data;
+            await ins.next({ context, content });
+            if (!outsChannels[context]) {
+              throw new Error(
+                "interconnected channel did not announce itself on a hub channel"
+              );
             }
-            port.start();
-            break;
+            outsChannels[context].next({
+              type: "ack",
+              context: name
+            });
+          }
+          break;
+        }
+
+        case "ack": {
+          if (isAck(data)) {
+            const { context } = data;
+            ensureOutsStatus(context);
+            outsStatus[context].locks--;
+            tryPushFor(context);
+          }
+          break;
         }
       }
     }
   });
 
-  if (contexts) {
-    const names = Object.keys(contexts);
-    for (let fromIdx = 0; fromIdx < names.length; fromIdx++) {
-      for (let toIdx = fromIdx + 1; toIdx < names.length; toIdx++) {
-        const mch = new MessageChannel();
-        const fromContext = contexts[names[fromIdx]];
-        if ("window" in fromContext) {
-          fromContext.window.postMessage(
-            { type: "bridge:create", to: names[toIdx], port: mch.port1 },
-            "*",
+  hubIn.postMessage({ type: "announce", context: name, port: mch.port1 }, [
+    mch.port1
+  ]);
+
+  const hubOutSub = ofMessagePort(hubOut).subscribe({
+    next: async event => {
+      if (!isEventWithType(event)) {
+        return;
+      }
+      const { data } = event;
+      switch (data.type) {
+        case "announce": {
+          hubIn.postMessage(
+            { type: "announceBack", context: name, port: mch.port1 },
             [mch.port1]
           );
+
+          if (isAnnouncement(data)) {
+            assumePort(data.context, data.port as MessagePort);
+          }
+          break;
         }
-        if ("worker" in fromContext) {
-          fromContext.worker.postMessage(
-            { type: "bridge:create", to: names[toIdx], port: mch.port1 },
-            [mch.port1]
-          );
-        }
-        const toContext = contexts[names[toIdx]];
-        if ("window" in toContext) {
-          toContext.window.postMessage(
-            { type: "bridge:create", to: names[fromIdx], port: mch.port2 },
-            "*",
-            [mch.port2]
-          );
-        }
-        if ("worker" in toContext) {
-          toContext.worker.postMessage(
-            { type: "bridge:create", to: names[fromIdx], port: mch.port2 },
-            [mch.port2]
-          );
+
+        case "announceBack": {
+          if (isAnnouncement(data)) {
+            assumePort(data.context, data.port as MessagePort);
+          }
+          break;
         }
       }
+    }
+  });
+
+  return new Duplex(ins, {
+    get closed() {
+      return closed.value;
+    },
+    next: ({ content, context }: InterconnectedMessage) => {
+      if (closed.value) {
+        return Promise.resolve();
+      }
+
+      return new Promise(resolve => {
+        ensureOutsStatus(context);
+        outsStatus[context].queue.push({ content, ack: resolve });
+        tryPushFor(context);
+      });
+    },
+    complete: async () => {
+      if (closed.value) {
+        return;
+      }
+      closed.value = true;
+      selfOutSub.cancel();
+      hubOutSub.cancel();
+    }
+  });
+
+  function assumePort(context: string, port: MessagePort) {
+    if (!outsChannels[context] || outsChannels[context].port !== port) {
+      outsChannels[context] = ofMessagePort(port as MessagePort);
     }
   }
 
-  return function getContextDuplex<N extends keyof CHS>(name: N) {
-    if (othersInt[name]) {
-      return Promise.resolve(othersInt[name]!);
+  async function tryPushFor(context: string) {
+    ensureOutsStatus(context);
+    if (
+      outsChannels[context] &&
+      outsStatus[context].queue.length &&
+      outsStatus[context].locks === 0
+    ) {
+      outsStatus[context].locks++;
+      const content = outsStatus[context].queue.shift()!;
+      await outsChannels[context].next({
+        type: "message",
+        context: name,
+        content
+      });
+      tryPushFor(context);
     }
-    return new Promise<MessagePortDuplex<CHS[N]["in"], CHS[N]["out"]>>(
-      resolve => {
-        const orders = (othersOrders[name] || []) as (Array<
-          (mpd: MessagePortDuplex<CHS[N]["in"], CHS[N]["out"]>) => any
-        >);
-        othersOrders[name] = orders;
-        orders.push(resolve);
-      }
-    );
-  };
+  }
+
+  function ensureOutsStatus(context: string) {
+    if (!outsStatus[context]) {
+      outsStatus[context] = { queue: [], locks: 0 };
+    }
+  }
 }

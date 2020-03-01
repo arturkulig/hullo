@@ -1,15 +1,15 @@
 {
   "name": "hullo",
-  "version": "0.8.0",
+  "version": "0.8.3",
   "description": "",
-  "main": "./core",
   "scripts": {
     "index": "ts-node index_folders.ts",
     "clear": "ts-node clean_up.ts",
     "index-n-clear": "concurrently \"npm run clear\" \"npm run index\"",
-    "test": "npm run index-n-clear && lerna exec jest",
+    "test": "npm run index-n-clear && tsc && lerna exec jest; npm run index-n-clear ",
     "build": "npm run index-n-clear && tsc",
-    "prepublish": "npm run build",
+    "prepublish": "lerna bootstrap && npm run index-n-clear && tsc",
+    "bootstrap": "lerna bootstrap && npm run index-n-clear && tsc",
     "dev": "npm run index-n-clear && lerna exec --parallel \"jest --watch\"",
     "create-package": "ts-node create_package.ts"
   },
@@ -18,12 +18,17 @@
   "license": "ISC",
   "devDependencies": {
     "@types/glob": "^7.1.1",
-    "@types/node": "^12.12.11",
-    "concurrently": "^5.0.0",
+    "@types/jest": "^24.0.13",
+    "@types/node": "^13.7.6",
+    "concurrently": "^5.1.0",
     "glob": "^7.1.6",
-    "lerna": "^3.19.0",
+    "jest": "^24.8.0",
+    "jest-dom": "^3.5.0",
+    "jest-environment-jsdom-fifteen": "^1.0.0",
+    "lerna": "^3.20.2",
     "prettier": "^1.19.1",
-    "ts-node": "^8.5.2",
-    "typescript": "^3.7.2"
+    "ts-jest": "^24.0.2",
+    "ts-node": "^8.6.2",
+    "typescript": "^3.8.2"
   }
 }

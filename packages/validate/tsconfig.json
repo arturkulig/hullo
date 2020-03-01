@@ -20,6 +20,6 @@
     "pretty": true,
     "strict": true
   },
-  "include": ["**/*.ts", "@hullo/messagepack.ts"],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules"]
 }

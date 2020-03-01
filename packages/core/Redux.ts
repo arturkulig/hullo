@@ -8,7 +8,7 @@ type NowOrSometime<T> = Promise<T> | T;
 
 interface Effect<STATE, ACTIONS extends Record<string, any>> {
   state?: STATE;
-  actions?: ACTION<ACTIONS>[];
+  effects?: ACTION<ACTIONS>[];
 }
 
 type Reducers<STATE, ACTIONS extends ActionDescs> = {
@@ -65,8 +65,8 @@ class Reductor<STATE, ACTIONS extends ActionDescs>
       await this.state$.update(async (state: STATE) => {
         if (this.reducers[action.type]) {
           const res = await this.reducers[action.type](state, action.data);
-          if ("actions" in res && res.actions !== undefined) {
-            actions.push(...res.actions);
+          if ("effects" in res && res.effects !== undefined) {
+            actions.push(...res.effects);
           }
           if ("state" in res && res.state !== undefined) {
             return res.state;

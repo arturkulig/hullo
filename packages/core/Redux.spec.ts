@@ -27,7 +27,7 @@ describe("Redux", () => {
         addNumber(state, data: number) {
           return {
             state: [...state, data],
-            actions: [{ type: "addString", data: "ok" }]
+            effects: [{ type: "addString", data: "ok" }]
           };
         },
         async addString(state, data: string) {

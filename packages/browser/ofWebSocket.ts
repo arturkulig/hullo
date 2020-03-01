@@ -9,7 +9,6 @@ export function ofWebSocket(
   const ch = new Channel<ArrayBuffer | string>();
 
   let connected = false;
-  let closed = false;
   const queue: Array<
     | { done: true; ack: () => any }
     | { done: false; data: ArrayBuffer | string; ack: () => any }
@@ -34,23 +33,24 @@ export function ofWebSocket(
     });
 
     ws.addEventListener("error", () => {
-      closed = true;
       ch.complete();
     });
 
     ws.addEventListener("close", () => {
-      closed = true;
       ch.complete();
     });
   });
 
   return new Duplex<ArrayBuffer | string, ArrayBuffer | string>(ch, {
     get closed() {
-      return closed;
+      return (
+        ws.readyState === WebSocket.CLOSING ||
+        ws.readyState === WebSocket.CLOSED
+      );
     },
 
     next(v: ArrayBuffer | string) {
-      if (closed) {
+      if (this.closed) {
         return Promise.resolve();
       }
       if (connected) {
@@ -64,10 +64,9 @@ export function ofWebSocket(
     },
 
     complete() {
-      if (closed) {
+      if (this.closed) {
         return Promise.resolve();
       }
-      closed = true;
       if (connected) {
         ws.close();
         return Promise.resolve();

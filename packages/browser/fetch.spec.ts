@@ -15,14 +15,14 @@ describe("fetch", () => {
         text: () => Promise.resolve('{ "ok": true }')
       });
 
-    fetch<{ 200: { ok: true }; 404: null }>("ulala", {})
+    fetch(new Request("ulala"))
       .withJSON()
       .withText()
       .subscribe({
         next: v => {
           switch (v.status) {
             case 200:
-              expect(v.json.ok).toBe(true);
+              expect((v.json as any).ok).toBe(true);
               expect(v.text).toBe('{ "ok": true }');
               expect("blob" in v).toBe(false);
               done();

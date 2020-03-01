@@ -22,6 +22,11 @@ export class ChildrenRenderApplicator
     const nextElements: Array<Node> = [];
     const nextSubscriptions: Array<Subscription> = [];
 
+    // const nextElements: Array<Node> = new Array<Node>(nextShapes.length);
+    // const nextSubscriptions: Array<Subscription> = new Array<Subscription>(
+    //   nextShapes.length
+    // );
+
     for (let i = 0; i < Math.max(shapes.length, nextShapes.length); i++) {
       const currentShape = shapes[i];
       const currentPossesion = subscriptions[i];

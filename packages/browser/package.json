@@ -1,20 +1,17 @@
 {
   "name": "@hullo/browser",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "",
   "main": "index.js",
   "scripts": {},
   "author": "Artur Kulig",
   "license": "ISC",
   "dependencies": {
-    "@hullo/core": "^0.8.2",
-    "@types/history": "^4.7.2",
+    "@hullo/core": "^0.8.3",
+    "@hullo/validate": "^0.8.3",
     "history": "^4.9.0"
   },
   "devDependencies": {
-    "@types/jest": "^24.0.18",
-    "jest": "^24.9.0",
-    "ts-jest": "^24.1.0",
-    "typescript": "^3.6.3"
+    "@types/history": "^4.7.2"
   }
 }

@@ -1,17 +1,20 @@
 import { Duplex } from "@hullo/core/Duplex";
-import { Connection } from "./Connection";
+import { Atom } from "@hullo/core/Atom";
+import { Validator } from "@hullo/validate";
+import { DTOTemplate } from "./DTOTemplate";
 
-export type Responders<Template extends RespondersTemplate> = {
-  [id in keyof Template]: Responder<Template[id]["in"], Template[id]["out"]>;
+export type Responders<SessionData, Template extends DTOTemplate> = {
+  [id in keyof Template]: Responder<
+    SessionData,
+    Template[id]["request"],
+    Template[id]["response"]
+  >;
 };
 
-export interface RespondersTemplate {
-  [command: string]: {
-    in: any;
-    out: any;
-  };
-}
-
-export interface Responder<IN = any, OUT = any> {
-  (comms: Duplex<IN, OUT>, connection: Connection): any;
+export interface Responder<SessionData, REQUEST = unknown, RESPONSE = unknown> {
+  validate?: Validator<REQUEST>;
+  respond(
+    comms: Duplex<REQUEST, RESPONSE>,
+    sessionData: Atom<SessionData>
+  ): any;
 }

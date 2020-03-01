@@ -1,17 +1,37 @@
-// originally at https://github.com/ygoe/msgpack.js/edit/master/msgpack.js and adapted to TS
+/*
+originally at https://github.com/ygoe/msgpack.js/edit/master/msgpack.js and adapted to TS
 
-export function serialize(data) {
+Copyright © 2019, Yves Goergen, https://unclassified.software/source/msgpack-js
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the “Software”), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+export function serialize(data: unknown) {
   const pow32 = 0x100000000; // 2^32
-  let floatBuffer, floatView;
+  let floatBuffer: ArrayBuffer;
+  let floatView: DataView;
   let array = new Uint8Array(128);
   let length = 0;
   append(data);
   return array.subarray(0, length);
 
-  function append(data) {
+  function append(data: unknown) {
     switch (typeof data) {
       case "undefined":
-        appendNull(data);
+        appendNull();
         break;
       case "boolean":
         appendBoolean(data);
@@ -23,7 +43,7 @@ export function serialize(data) {
         appendString(data);
         break;
       case "object":
-        if (data === null) appendNull(data);
+        if (data === null) appendNull();
         else if (data instanceof Date) appendDate(data);
         else if (Array.isArray(data)) appendArray(data);
         else if (
@@ -46,15 +66,15 @@ export function serialize(data) {
     }
   }
 
-  function appendNull(data) {
+  function appendNull() {
     appendByte(0xc0);
   }
 
-  function appendBoolean(data) {
+  function appendBoolean(data: boolean) {
     appendByte(data ? 0xc3 : 0xc2);
   }
 
-  function appendNumber(data) {
+  function appendNumber(data: number) {
     if (isFinite(data) && Math.floor(data) === data) {
       // Integer
       if (data >= 0 && data <= 0x7f) {
@@ -119,7 +139,7 @@ export function serialize(data) {
     }
   }
 
-  function appendString(data) {
+  function appendString(data: string) {
     let bytes = encodeUtf8(data);
     let length = bytes.length;
 
@@ -132,7 +152,17 @@ export function serialize(data) {
     appendBytes(bytes);
   }
 
-  function appendArray(data) {
+  function appendArray(
+    data:
+      | Array<unknown>
+      | Int8Array
+      | Int16Array
+      | Uint16Array
+      | Int32Array
+      | Uint32Array
+      | Float32Array
+      | Float64Array
+  ) {
     let length = data.length;
 
     if (length <= 0xf) appendByte(0x90 + length);
@@ -145,7 +175,7 @@ export function serialize(data) {
     }
   }
 
-  function appendBinArray(data) {
+  function appendBinArray(data: Uint8Array | Uint8ClampedArray) {
     let length = data.length;
 
     if (length <= 0xf) appendBytes([0xc4, length]);
@@ -156,9 +186,8 @@ export function serialize(data) {
     appendBytes(data);
   }
 
-  function appendObject(data) {
-    let length = 0;
-    for (let key in data) length++;
+  function appendObject<T extends object>(data: T) {
+    let length = Object.keys(data).length;
 
     if (length <= 0xf) appendByte(0x80 + length);
     else if (length <= 0xffff) appendBytes([0xde, length >>> 8, length]);
@@ -171,7 +200,7 @@ export function serialize(data) {
     }
   }
 
-  function appendDate(data) {
+  function appendDate(data: Date) {
     let sec = data.getTime() / 1000;
     if (data.getMilliseconds() === 0 && sec >= 0 && sec < 0x100000000) {
       // 32 bit seconds
@@ -199,7 +228,7 @@ export function serialize(data) {
     }
   }
 
-  function appendByte(byte) {
+  function appendByte(byte: number) {
     if (array.length < length + 1) {
       let newLength = array.length * 2;
       while (newLength < length + 1) newLength *= 2;
@@ -211,7 +240,19 @@ export function serialize(data) {
     length++;
   }
 
-  function appendBytes(bytes) {
+  function appendBytes(
+    bytes:
+      | Array<number>
+      | Int8Array
+      | Uint8Array
+      | Uint8ClampedArray
+      | Int16Array
+      | Uint16Array
+      | Int32Array
+      | Uint32Array
+      | Float32Array
+      | Float64Array
+  ) {
     if (array.length < length + bytes.length) {
       let newLength = array.length * 2;
       while (newLength < length + bytes.length) newLength *= 2;
@@ -223,7 +264,7 @@ export function serialize(data) {
     length += bytes.length;
   }
 
-  function appendInt64(value) {
+  function appendInt64(value: number) {
     // Split 64 bit number into two 32 bit numbers because JavaScript only regards 32 bits for
     // bitwise operations.
     let hi, lo;
@@ -270,7 +311,7 @@ export function deserialize(input: ArrayBuffer | Uint8Array): unknown {
   }
   return data;
 
-  function read() {
+  function read(): unknown {
     const byte = array[pos++];
     if (byte >= 0x00 && byte <= 0x7f) return byte; // positive fixint
     if (byte >= 0x80 && byte <= 0x8f) return readMap(byte - 0x80); // fixmap
@@ -321,24 +362,27 @@ export function deserialize(input: ArrayBuffer | Uint8Array): unknown {
     );
   }
 
-  function readFloat(size) {
+  function readFloat(size: number) {
     let view = new DataView(array.buffer, pos, size);
     pos += size;
     if (size === 4) return view.getFloat32(0, false);
     if (size === 8) return view.getFloat64(0, false);
   }
 
-  function readMap(size, lengthSize = 0) {
+  function readMap(size: number, lengthSize = 0) {
     if (size < 0) size = readUInt(lengthSize);
-    let data = {};
+    let data: Record<string, unknown> = {};
     while (size-- > 0) {
       let key = read();
-      data[key] = read();
+      const value = read();
+      if ((typeof key === "string" && key in data) || typeof key === "number") {
+        data[String(key)] = value;
+      }
     }
     return data;
   }
 
-  function readArray(size, lengthSize = 0) {
+  function readArray(size: number, lengthSize = 0) {
     if (size < 0) size = readUInt(lengthSize);
     let data = [];
     while (size-- > 0) {
@@ -347,7 +391,7 @@ export function deserialize(input: ArrayBuffer | Uint8Array): unknown {
     return data;
   }
 
-  function readExt(size, lengthSize = 0) {
+  function readExt(size: number, lengthSize = 0) {
     if (size < 0) size = readUInt(lengthSize);
     let type = readUInt(1);
     let data = readBin(size);
@@ -358,14 +402,14 @@ export function deserialize(input: ArrayBuffer | Uint8Array): unknown {
     return { type: type, data: data };
   }
 
-  function readBin(size, lengthSize = 0) {
+  function readBin(size: number, lengthSize = 0) {
     if (size < 0) size = readUInt(lengthSize);
     let data = array.subarray(pos, pos + size);
     pos += size;
     return data;
   }
 
-  function readStr(size, lengthSize = 0) {
+  function readStr(size: number, lengthSize = 0) {
     if (size < 0) size = readUInt(lengthSize);
     let start = pos;
     pos += size;
@@ -381,7 +425,7 @@ export function deserialize(input: ArrayBuffer | Uint8Array): unknown {
     return value;
   }
 
-  function readExtDate(data) {
+  function readExtDate(data: Uint8Array) {
     if (data.length === 4) {
       let sec =
         ((data[0] << 24) >>> 0) +
@@ -417,7 +461,7 @@ export function deserialize(input: ArrayBuffer | Uint8Array): unknown {
     throw new Error("Invalid data length for a date value.");
   }
 
-  function readInt(size) {
+  function readInt(size: number) {
     let value = 0;
     let first = true;
     while (size-- > 0) {
@@ -438,7 +482,7 @@ export function deserialize(input: ArrayBuffer | Uint8Array): unknown {
 }
 
 // Encodes a string to UTF-8 bytes.
-function encodeUtf8(str) {
+function encodeUtf8(str: string) {
   // Prevent excessive array allocation and slicing for all 7-bit characters
   let ascii = true,
     length = str.length;
@@ -485,7 +529,7 @@ function encodeUtf8(str) {
 }
 
 // Decodes a string from UTF-8 bytes.
-function decodeUtf8(bytes, start, length) {
+function decodeUtf8(bytes: Uint8Array, start: number, length: number) {
   // Based on: https://gist.github.com/pascaldekloe/62546103a1576803dade9269ccf76330
   let i = start,
     str = "";

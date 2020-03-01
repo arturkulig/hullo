@@ -1,14 +1,12 @@
 {
-  "name": "@hullo/packagename",
-  "private": true,
+  "name": "@hullo/validate",
+  "private": false,
   "version": "0.8.3",
   "description": "",
   "main": "index.js",
   "scripts": {},
   "author": "Artur Kulig",
   "license": "ISC",
-  "dependencies": {
-    "@hullo/core": "^0.8.3"
-  },
+  "dependencies": {},
   "devDependencies": {}
 }

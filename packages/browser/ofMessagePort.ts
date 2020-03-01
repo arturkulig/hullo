@@ -7,43 +7,31 @@ import {
 import { Duplex } from "@hullo/core/Duplex";
 import { subject } from "@hullo/core/operators/subject";
 
-export interface MessagePortDuplex<IN, OUT> extends Duplex<IN, OUT> {
-  post(message: IN, transferable?: Transferable[]): Promise<void>;
+export function ofMessagePort(port: MessagePort) {
+  return new MessagePortDuplex(port);
 }
 
-export function ofMessagePort<IN = any, OUT = IN>(
-  port: MessagePort
-): MessagePortDuplex<IN, OUT> {
-  let closed = false;
+export class MessagePortDuplex extends Duplex<unknown, unknown> {
+  constructor(public readonly port: MessagePort) {
+    super(new Observable<unknown>(new MessagesProducer(port)).pipe(subject), {
+      get closed() {
+        return closed;
+      },
 
-  return Object.assign(
-    new Duplex<IN, OUT>(
-      new Observable<OUT>(new MessagesProducer(port)).pipe(subject),
-      {
-        get closed() {
-          return closed;
-        },
-
-        next,
-        complete
+      next: (message: unknown) => {
+        return this.send({ done: false, message });
+      },
+      complete: () => {
+        return this.send({ done: true });
       }
-    ),
-    {
-      post(message: IN, transfer?: Transferable[]) {
-        return send({ done: false, message, transfer });
-      }
-    }
-  );
-
-  function next(message: IN) {
-    return send({ done: false, message });
+    });
   }
 
-  function complete() {
-    return send({ done: true });
+  post(message: unknown, transfer?: Transferable[]) {
+    return this.send({ done: false, message, transfer });
   }
 
-  function send(signal: Signal<IN>) {
+  private send(signal: Signal) {
     if (closed) {
       return Promise.resolve();
     }
@@ -51,12 +39,12 @@ export function ofMessagePort<IN = any, OUT = IN>(
       closed = true;
     }
     if (signal.done == true) {
-      port.close();
+      this.port.close();
     } else {
       if (signal.transfer) {
-        port.postMessage(signal.message, signal.transfer);
+        this.port.postMessage(signal.message, signal.transfer);
       } else {
-        port.postMessage(signal.message);
+        this.port.postMessage(signal.message);
       }
     }
     return Promise.resolve();
@@ -109,6 +97,6 @@ export interface MessageChannelData<T> {
   transfer?: Transferable[];
 }
 
-type Signal<T> =
-  | { done: false; message: T; transfer?: Transferable[] }
+type Signal =
+  | { done: false; message: unknown; transfer?: Transferable[] }
   | { done: true };
