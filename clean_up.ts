@@ -17,18 +17,23 @@ const dts = glob
   .map(f => path.join(path.dirname(f), path.basename(f, ".d.ts")))
   .filter(f => !f.includes("node_modules"));
 
+process.stdout.write("\nRemoving JS files");
 jss
   .filter(file => tss.indexOf(file) >= 0)
   .map(l => `${l}.js`)
   .forEach(file => {
-    console.log("removing", path.resolve(__dirname, file));
+    process.stdout.write(".");
+    // console.log("removing", path.resolve(__dirname, file));
     fs.unlinkSync(path.resolve(__dirname, file));
   });
 
+process.stdout.write("\nRemoving .d.ts files");
 dts
   .filter(file => tss.indexOf(file) >= 0)
   .map(l => `${l}.d.ts`)
   .forEach(file => {
-    console.log("removing", path.resolve(__dirname, file));
+    process.stdout.write(".");
+    // console.log("removing", path.resolve(__dirname, file));
     fs.unlinkSync(path.resolve(__dirname, file));
   });
+process.stdout.write("\n");

@@ -10,12 +10,5 @@
     "@hullo/browser": "^0.8.2",
     "@hullo/core": "^0.8.2"
   },
-  "devDependencies": {
-    "@types/jest": "^24.0.18",
-    "jest": "^24.9.0",
-    "jest-dom": "^3.5.0",
-    "jest-environment-jsdom-fifteen": "^1.0.0",
-    "ts-jest": "^24.1.0",
-    "typescript": "^3.6.3"
-  }
+  "devDependencies": {}
 }

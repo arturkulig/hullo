@@ -8,7 +8,7 @@ type ResponseOf = {
 
 export { fetch$ as fetch };
 
-function fetch$(request: Request) {
+function fetch$(request: RequestInfo) {
   return getFetcher(
     request,
     async response =>
@@ -20,34 +20,34 @@ function fetch$(request: Request) {
   );
 }
 
-export function fetchWithJSON(request: Request) {
+export function fetchWithJSON(request: RequestInfo) {
   return fetch$(request).withJSON();
 }
 
-export function fetchWithArrayBuffer(request: Request) {
+export function fetchWithArrayBuffer(request: RequestInfo) {
   return fetch$(request).withArrayBuffer();
 }
 
-export function fetchWithBlob(request: Request) {
+export function fetchWithBlob(request: RequestInfo) {
   return fetch$(request).withBlob();
 }
 
-export function fetchWithText(request: Request) {
+export function fetchWithText(request: RequestInfo) {
   return fetch$(request).withText();
 }
 
-export function fetchWithFormData(request: Request) {
+export function fetchWithFormData(request: RequestInfo) {
   return fetch$(request).withFormData();
 }
 
-export function fetchWithJSONAndText(request: Request) {
+export function fetchWithJSONAndText(request: RequestInfo) {
   return fetch$(request)
     .withText()
     .withJSON();
 }
 
 function getFetcher<RES>(
-  request: Request,
+  request: RequestInfo,
   process: (response: Response) => Promise<RES>
 ): FetchExtend<RES> {
   const stream = new Observable<RES>(new FetchProducer<RES>(request, process));
@@ -84,7 +84,7 @@ function getFetcher<RES>(
 
 class FetchProducer<RES> implements ComplexProducer<RES> {
   constructor(
-    private request: Request,
+    private request: RequestInfo,
     private process: (response: Response) => Promise<RES>
   ) {}
 
@@ -93,8 +93,8 @@ class FetchProducer<RES> implements ComplexProducer<RES> {
     const signal = controller.signal;
     fetch(this.request, { signal }).then(response =>
       this.process(response)
-        .then(observer.next.bind(observer))
-        .then(observer.complete.bind(observer))
+        .then(response => observer.next(response))
+        .then(() => observer.complete())
     );
     return new FetchCancel(controller);
   }

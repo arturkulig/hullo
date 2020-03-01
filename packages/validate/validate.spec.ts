@@ -13,7 +13,10 @@ import {
   isEither,
   isNullable,
   isOptional,
-  isNumberOf
+  isNumberOf,
+  isTrue,
+  isFalse,
+  isStringOf
 } from "./validate";
 
 describe("validate validates", () => {
@@ -72,17 +75,17 @@ describe("validate validates", () => {
   });
 
   it("True", () => {
-    expect(isBoolean(undefined)).toBeFalsy();
-    expect(isBoolean(1)).toBeFalsy();
-    expect(isBoolean(true)).toBeTruthy();
-    expect(isBoolean(false)).toBeFalsy();
+    expect(isTrue(undefined)).toBeFalsy();
+    expect(isTrue(1)).toBeFalsy();
+    expect(isTrue(true)).toBeTruthy();
+    expect(isTrue(false)).toBeFalsy();
   });
 
   it("False", () => {
-    expect(isBoolean(undefined)).toBeFalsy();
-    expect(isBoolean(1)).toBeFalsy();
-    expect(isBoolean(true)).toBeFalsy();
-    expect(isBoolean(false)).toBeTruthy();
+    expect(isFalse(undefined)).toBeFalsy();
+    expect(isFalse(1)).toBeFalsy();
+    expect(isFalse(true)).toBeFalsy();
+    expect(isFalse(false)).toBeTruthy();
   });
 
   it("Null", () => {
@@ -100,7 +103,7 @@ describe("validate validates", () => {
 
   it("Specific number", () => {
     expect(isNumberOf(1)(undefined)).toBeFalsy();
-    expect(isNumberOf(1)(NaN)).toBeTruthy();
+    expect(isNumberOf(1)(NaN)).toBeFalsy();
     expect(isNumberOf(1)(0)).toBeFalsy();
     expect(isNumberOf(1)(1)).toBeTruthy();
   });
@@ -109,6 +112,12 @@ describe("validate validates", () => {
     expect(isString(undefined)).toBeFalsy();
     expect(isString("")).toBeTruthy();
     expect(isString("x")).toBeTruthy();
+  });
+
+  it("Specific string", () => {
+    expect(isStringOf("x")(undefined)).toBeFalsy();
+    expect(isStringOf("x")("")).toBeFalsy();
+    expect(isStringOf("x")("x")).toBeTruthy();
   });
 
   it("Symbol", () => {

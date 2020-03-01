@@ -1,6 +1,6 @@
-import { fetch } from "./fetch";
+(global as any).window = global;
 
-(global as any).window = {};
+import { fetch } from "./fetch";
 
 describe("fetch", () => {
   it("types test", done => {
@@ -15,7 +15,7 @@ describe("fetch", () => {
         text: () => Promise.resolve('{ "ok": true }')
       });
 
-    fetch(new Request("ulala"))
+    fetch("ulala")
       .withJSON()
       .withText()
       .subscribe({
