@@ -5,3 +5,4 @@ node_modules/
 *.ts
 !*.d.ts
 .DS_Store
+testapp/

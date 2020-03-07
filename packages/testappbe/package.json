@@ -1,0 +1,24 @@
+{
+  "name": "testappbe",
+  "version": "1.0.0",
+  "private": true,
+  "description": "",
+  "scripts": {
+    "start": "ts-node-dev main.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@hullo/core": "*",
+    "@hullo/validate": "*",
+    "@hullo/webapp": "*",
+    "brotli": "^1.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^13.7.7",
+    "ts-node": "^8.6.2",
+    "ts-node-dev": "^1.0.0-pre.44",
+    "typescript": "^3.8.3",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v17.2.0"
+  }
+}

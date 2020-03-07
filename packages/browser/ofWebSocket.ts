@@ -1,9 +1,9 @@
 import { Duplex } from "@hullo/core/Duplex";
 import { Channel } from "@hullo/core/Channel";
 
-export function ofWebSocket(
-  ws: WebSocket
-): Duplex<ArrayBuffer | string, ArrayBuffer | string> {
+export type WebSocketIO = Duplex<ArrayBuffer | string, ArrayBuffer | string>;
+
+export function ofWebSocket(ws: WebSocket): WebSocketIO {
   ws.binaryType = "arraybuffer";
 
   const ch = new Channel<ArrayBuffer | string>();
@@ -56,11 +56,10 @@ export function ofWebSocket(
       if (connected) {
         ws.send(v);
         return Promise.resolve();
-      } else {
-        return new Promise<void>(r => {
-          queue.push({ done: false, data: v, ack: r });
-        });
       }
+      return new Promise<void>(r => {
+        queue.push({ done: false, data: v, ack: r });
+      });
     },
 
     complete() {
@@ -70,11 +69,10 @@ export function ofWebSocket(
       if (connected) {
         ws.close();
         return Promise.resolve();
-      } else {
-        return new Promise<void>(r => {
-          queue.push({ done: true, ack: r });
-        });
       }
+      return new Promise<void>(r => {
+        queue.push({ done: true, ack: r });
+      });
     }
   });
 }

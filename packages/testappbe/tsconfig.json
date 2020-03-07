@@ -2,9 +2,9 @@
   "compilerOptions": {
     "module": "commonjs",
     "moduleResolution": "node",
-    "declaration": true,
+    "declaration": false,
     "target": "esnext",
-    "lib": ["esnext", "esnext.asynciterable", "dom"],
+    "lib": ["esnext", "esnext.asynciterable", "DOM"],
     "types": ["node"],
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
@@ -18,8 +18,9 @@
     "noUnusedParameters": true,
     "skipLibCheck": true,
     "pretty": true,
-    "strict": true
+    "strict": true,
+    "typeRoots": ["./node_modules/@types", "./typings"]
   },
-  "include": ["packages/*/index.ts", "packages/*/main.ts"],
+  "include": ["src/main.ts", "typings/**/*.d.ts"],
   "exclude": ["node_modules"]
 }

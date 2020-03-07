@@ -9,8 +9,8 @@ import {
 
 export enum MessageTypeMark {
   Start = 1,
-  Ready = 2,
-  Data = 3,
+  Data = 2,
+  Ready = 3,
   End = 4
 }
 

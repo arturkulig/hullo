@@ -1,1 +1,1 @@
-export * from './webAppBrowserClient'
+export * from './WebAppBrowserClient'

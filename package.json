@@ -11,7 +11,10 @@
     "prepublish": "lerna bootstrap && npm run index-n-clear && tsc",
     "bootstrap": "lerna bootstrap && npm run index-n-clear && tsc",
     "dev": "npm run index-n-clear && lerna exec --parallel \"jest --watch\"",
-    "create-package": "ts-node create_package.ts"
+    "create-package": "ts-node create_package.ts",
+    "testapp": "npm run index-n-clear && concurrently npm:testappbe npm:testappfe",
+    "testappbe": "cd packages/testappbe; npm start",
+    "testappfe": "cd packages/testappfe; npm start"
   },
   "keywords": [],
   "author": "",
