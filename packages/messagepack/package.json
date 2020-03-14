@@ -1,6 +1,5 @@
 {
   "name": "@hullo/messagepack",
-  "private": false,
   "version": "0.9.0",
   "description": "",
   "main": "index.js",

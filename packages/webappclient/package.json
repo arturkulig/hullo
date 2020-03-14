@@ -1,6 +1,5 @@
 {
   "name": "@hullo/webappclient",
-  "private": false,
   "version": "0.9.0",
   "description": "",
   "main": "index.js",
