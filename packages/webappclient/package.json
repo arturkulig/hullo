@@ -1,19 +1,18 @@
 {
   "name": "@hullo/webappclient",
   "private": false,
-  "version": "0.8.3",
+  "version": "0.9.0",
   "description": "",
   "main": "index.js",
   "scripts": {},
   "author": "Artur Kulig",
   "license": "ISC",
   "dependencies": {
-    "@hullo/core": "^0.8.3",
-    "@hullo/webapp": "^0.8.3",
-    "@hullo/browser": "^0.8.3",
-    "@hullo/node": "^0.8.3",
-    "@hullo/validate": "^0.8.3",
-    "@hullo/messagepack": "^0.8.3"
-  },
-  "devDependencies": {}
+    "@hullo/browser": "^0.9.0",
+    "@hullo/core": "^0.9.0",
+    "@hullo/messagepack": "^0.9.0",
+    "@hullo/node": "^0.9.0",
+    "@hullo/validate": "^0.9.0",
+    "@hullo/webapp": "^0.9.0"
+  }
 }

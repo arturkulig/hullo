@@ -1,14 +1,13 @@
 {
   "name": "@hullo/dom",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "description": "",
   "main": "index.js",
   "scripts": {},
   "author": "Artur Kulig",
   "license": "ISC",
   "dependencies": {
-    "@hullo/browser": "^0.8.2",
-    "@hullo/core": "^0.8.2"
-  },
-  "devDependencies": {}
+    "@hullo/browser": "^0.9.0",
+    "@hullo/core": "^0.9.0"
+  }
 }
