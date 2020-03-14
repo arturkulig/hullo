@@ -20,6 +20,10 @@
     "pretty": true,
     "strict": true
   },
-  "include": ["packages/*/index.ts", "packages/*/main.ts"],
+  "include": [
+    "packages/*/index.ts",
+    "packages/*/main.ts",
+    "packages/*/typings/*.d.ts"
+  ],
   "exclude": ["node_modules"]
 }
