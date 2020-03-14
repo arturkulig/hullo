@@ -13,5 +13,8 @@
     "@hullo/node": "^0.9.0",
     "@hullo/validate": "^0.9.0",
     "@hullo/webapp": "^0.9.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

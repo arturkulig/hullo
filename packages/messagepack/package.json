@@ -5,5 +5,8 @@
   "main": "index.js",
   "scripts": {},
   "author": "Artur Kulig",
-  "license": "ISC"
+  "license": "ISC",
+  "publishConfig": {
+    "access": "public"
+  }
 }

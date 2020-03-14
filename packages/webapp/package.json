@@ -15,5 +15,8 @@
   },
   "devDependencies": {
     "@types/cookie": "^0.3.3"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
